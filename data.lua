@@ -1,6 +1,7 @@
 local filterPump = table.deepcopy(data.raw["pump"]["pump"])
 --print(serpent.block(filterPump))
 filterPump.name = "filter-pump"
+filterPump.minable.result = "filter-pump"
 data:extend{filterPump}
 
 
