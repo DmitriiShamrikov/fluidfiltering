@@ -3,14 +3,11 @@ local CHOOSE_BUTTON_NAME = 'ui-liquid-filter-chooser'
 -- Unfortunately pumping from a fluid wagon doesn't seem working through fluidboxes
 -- therefore fluidbox filter on a pump doesn't work in this case. As a workaround
 -- I run through all pumps and disable them if there is a fluid wagon with a wrong fluid in front of them
--- I don't want to check every pumps every frame as it could be pretty expensive, so
--- the idea is to check every now and then but be faster then a pump latch connecting to a fluid wagon
--- This value should be less than fluid_wagon_connector_frame_count (35 at the time of writing this)
--- from the original prototype data but unfortunately we can't access it here and
--- I don't see anything like this in LuaEntityPrototype
-local PUMP_WAGON_CHECK_PERIOD = 30
+-- Can I check that not every frame?
+local PUMP_WAGON_CHECK_PERIOD = 1
 
 local g_SelectedEntity = nil
+local g_InputPositionCache = {}
 
 function InitGlobal()
 	if global.pumps == nil then
@@ -61,6 +58,25 @@ end
 
 function UnregisterPump(uid)
 	global.pumps[uid] = nil
+	g_InputPositionCache[uid] = nil
+end
+
+function GetInputPosition(entity)
+	if g_InputPositionCache[entity.unit_number] == nil then
+		local offset = nil
+		for i, connection in ipairs(entity.prototype.fluidbox_prototypes[1].pipe_connections) do
+			if connection.type == 'input' then
+				local dirIdx = entity.direction / 2 + 1
+				offset = connection.positions[dirIdx]
+				break
+			end
+		end
+
+		local pos = entity.position
+		pos = {(pos[1] or pos.x) + (offset[1] or offset.x), (pos[2] or pos.y) + (offset[2] or offset.y)}
+		g_InputPositionCache[entity.unit_number] = pos
+	end
+	return g_InputPositionCache[entity.unit_number]
 end
 
 function ShouldEnablePump(pump)
@@ -74,8 +90,8 @@ function ShouldEnablePump(pump)
 		return true
 	end
 
-	local railPos = pump.pump_rail_target.position
-	local wagons = pump.pump_rail_target.surface.find_entities_filtered{area={railPos, railPos}, name='fluid-wagon'}
+	local inputPos = GetInputPosition(pump)
+	local wagons = pump.pump_rail_target.surface.find_entities_filtered{area={inputPos, inputPos}, type='fluid-wagon'}
 	-- normally there should be only 1 wagon
 	for i, wagon in ipairs(wagons) do
 		local wagonFluid = wagon.fluidbox[1]
@@ -89,16 +105,26 @@ end
 
 function VerifyPumps()
 	for uid, pump in pairs(global.pumps) do
-		local enable = ShouldEnablePump(pump)
-		if enable ~= pump.active then
-			pump.active = enable
-			game.print((enable and 'Enabling' or 'Disabling') .. ' pump ' .. uid)
+		if pump == nil or not pump.valid then
+			global.pumps[uid] = nil
+		else
+			local enable = ShouldEnablePump(pump)
+			if enable ~= pump.active then
+				pump.active = enable
+				game.print((enable and 'Enabling' or 'Disabling') .. ' pump ' .. uid)
+			end
 		end
 	end
 end
 
 script.on_init(InitGlobal)
 script.on_configuration_changed(InitGlobal)
+
+script.on_nth_tick(PUMP_WAGON_CHECK_PERIOD, VerifyPumps)
+
+local entityFilters = {{filter='name', name='filter-pump'}}
+script.on_event(defines.events.on_built_entity, RegisterPump, entityFilters)
+script.on_event(defines.events.on_robot_built_entity, RegisterPump, entityFilters)
 
 script.on_event(defines.events.on_gui_opened, function(event)
 	g_SelectedEntity = nil
@@ -126,11 +152,10 @@ script.on_event(defines.events.on_entity_destroyed, function(event)
 	end
 end)
 
-script.on_nth_tick(PUMP_WAGON_CHECK_PERIOD, VerifyPumps)
+script.on_event(defines.events.on_player_rotated_entity, function(event)
+	g_InputPositionCache[event.entity.unit_number] = nil
+end)
 
-local entityFilters = {{filter='name', name='filter-pump'}}
-script.on_event(defines.events.on_built_entity, RegisterPump, entityFilters)
-script.on_event(defines.events.on_robot_built_entity, RegisterPump, entityFilters)
 --script.on_event(defines.events.on_entity_settings_pasted
 
 -- debug stuff
