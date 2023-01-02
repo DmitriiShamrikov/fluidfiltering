@@ -1,5 +1,7 @@
-local FRAME_NAME = 'ui-liquid-filter-ui'
+local WAGON_FRAME_NAME = 'ui-wagon'
+local FILTER_FRAME_NAME = 'ui-liquid-filter'
 local CHOOSE_BUTTON_NAME = 'ui-liquid-filter-chooser'
+local CLOSE_BUTTON_NAME = 'ui-close'
 -- Unfortunately pumping from a fluid wagon doesn't seem working through fluidboxes
 -- therefore fluidbox filter on a pump doesn't work in this case. As a workaround
 -- I run through all pumps and disable them if there is a fluid wagon with a wrong fluid in front of them
@@ -15,20 +17,83 @@ function InitGlobal()
 	end
 end
 
-function OpenFilterBox(playerIndex, entity)
-	local player = game.get_player(playerIndex)
+function OnGuiOpened(event)
+	g_SelectedEntity = nil
+	if event.gui_type ~= defines.gui_type.entity or event.entity == nil then
+		return
+	end
+
+	local player = game.get_player(event.player_index)
 	if player == nil then
 		return
 	end
-	
-	local filterFrame = player.gui.relative[FRAME_NAME]
+
+	local isPump = event.entity.prototype.name == 'filter-pump'
+	local isWagon = event.entity.prototype.name == 'filter-fluid-wagon'
+	-- TODO wagons may have (with other mods) or may not have (vanilla) own frame
+	-- need to detect that and skip wagon UI
+	local hasOwnUI = true
+	if isPump or isWagon then
+		if isWagon then
+			OpenWagonUI(player, event.entity)
+		end
+		OpenFilterBox(player, event.entity)
+	end
+end
+
+function OpenWagonUI(player, entity)
+	local wagonFrame = player.gui.screen[WAGON_FRAME_NAME]
+	local preview = nil
+	if wagonFrame == nil then
+		wagonFrame = player.gui.screen.add{type='frame', name=WAGON_FRAME_NAME}
+		wagonFrame.auto_center = true
+
+		local mainFlow = wagonFrame.add{type='flow', direction='vertical'}
+
+		local titleFlow = mainFlow.add{type='flow', direction='horizontal'}
+		titleFlow.drag_target = wagonFrame
+		titleFlow.style.horizontal_spacing = 12
+		titleFlow.add{type='label', ignored_by_interaction=true, style='frame_title', caption='Filter fluid wagon'}
+		titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler_style'}
+		titleFlow.add{
+			type='sprite-button',
+			name=CLOSE_BUTTON_NAME,
+			style='close_button',
+			sprite='utility/close_white',
+			hovered_sprite='utility/close_black',
+			clicked_sprite='utility/close_black',
+		}
+
+		local contentFrame = mainFlow.add{type='frame', style='inside_shallow_frame_with_padding'}
+		local contentFlow = contentFrame.add{type='flow', direction='vertical'}
+
+		local statusFlow = contentFlow.add{type='flow', direction='horizontal'}
+		statusFlow.style.vertical_align = 'center'
+		statusFlow.style.top_margin = -4
+		statusFlow.style.bottom_margin = 4
+		statusFlow.add{type='sprite', sprite='utility/status_working'}
+		statusFlow.add{type='label', caption={'entity-status.working'}}
+
+		local previewContainer = contentFlow.add{type='frame', style='slot_container_frame'}
+		preview = previewContainer.add{type='entity-preview', style='wide_entity_button'}
+	else
+		--        wagonFrame/mainFlow/contentFrame/contentFlow/previewContainer/preview
+		preview = wagonFrame.children[1].children[2].children[1].children[2].children[1]
+	end
+
+	preview.entity = entity
+	player.opened = wagonFrame
+end
+
+function OpenFilterBox(player, entity)
+	local filterFrame = player.gui.relative[FILTER_FRAME_NAME]
 	if filterFrame == nil then
 		local anchor = {
-			gui = defines.relative_gui_type.entity_with_energy_source_gui,
+			gui = defines.relative_gui_type.entity_with_energy_source_gui, -- ???
 			position = defines.relative_gui_position.bottom,
-			name = 'filter-pump'
+			names = {'filter-pump', 'filter-fluid-wagon'}
 		}
-		filterFrame = player.gui.relative.add{type='frame', name=FRAME_NAME, caption='Filter', anchor=anchor}
+		filterFrame = player.gui.relative.add{type='frame', name=FILTER_FRAME_NAME, caption='Filter', anchor=anchor}
 		filterFrame.add{type='choose-elem-button', name=CHOOSE_BUTTON_NAME, elem_type='fluid'}
 	end
 
@@ -36,6 +101,18 @@ function OpenFilterBox(playerIndex, entity)
 	filterFrame[CHOOSE_BUTTON_NAME].elem_value = filter and filter.name or nil
 
 	g_SelectedEntity = entity
+end
+
+function CloseWagonUI(element)
+	if element.name == CLOSE_BUTTON_NAME then
+		while element ~= nil do
+			if element.name == WAGON_FRAME_NAME then
+				element.destroy()
+				break
+			end
+			element = element.parent
+		end
+	end
 end
 
 function SetFilter(playerIndex, fluid)
@@ -126,17 +203,18 @@ local entityFilters = {{filter='name', name='filter-pump'}}
 script.on_event(defines.events.on_built_entity, RegisterPump, entityFilters)
 script.on_event(defines.events.on_robot_built_entity, RegisterPump, entityFilters)
 
-script.on_event(defines.events.on_gui_opened, function(event)
-	g_SelectedEntity = nil
-	if event.gui_type ~= defines.gui_type.entity or event.entity == nil then
-		return
-	end
-	if event.entity.prototype.name ~= 'filter-pump' then
+script.on_event('open_gui', function(event)
+	local player = game.get_player(event.player_index)
+	if player == nil or player.selected == nil then
 		return
 	end
 
-	OpenFilterBox(event.player_index, event.entity)
+	event.gui_type = defines.gui_type.entity
+	event.entity = player.selected
+	OnGuiOpened(event)
 end)
+
+script.on_event(defines.events.on_gui_opened, OnGuiOpened)
 
 script.on_event(defines.events.on_gui_elem_changed, function(event)
 	if g_SelectedEntity == nil or event.element.name ~= CHOOSE_BUTTON_NAME then
@@ -144,6 +222,17 @@ script.on_event(defines.events.on_gui_elem_changed, function(event)
 	end
 
 	SetFilter(event.player_index, event.element.elem_value)
+end)
+
+script.on_event(defines.events.on_gui_click, function(event)
+	CloseWagonUI(event.element)
+end)
+
+script.on_event(defines.events.on_gui_closed, function(event)
+	if event.element and event.element.name == WAGON_FRAME_NAME then
+		event.element.destroy()
+		-- filter?
+	end
 end)
 
 script.on_event(defines.events.on_entity_destroyed, function(event)
