@@ -9,12 +9,43 @@ local CLOSE_BUTTON_NAME = 'ui-close'
 local PUMP_WAGON_CHECK_PERIOD = 1
 
 local g_SelectedEntity = nil
-local g_InputPositionCache = {}
+local g_PumpConnectionsCache = {}
+
+function QueryEntities(filter, fn)
+	local surfaces = {}
+	for _, player in ipairs(game.connected_players) do
+		if player ~= nil and player.surface ~= nil then
+			surfaces[player.surface] = true
+		end
+	end
+
+	local result = {}
+	for surface, _ in pairs(surfaces) do
+		local entities = surface.find_entities_filtered{area=nil, name=filter.name, type=filter.type}
+		for _, entity in ipairs(entities) do
+			result[entity.unit_number] = fn and fn(entity) or entity
+		end
+	end
+
+	return result
+end
+
+function PopulatePumps()
+	global.pumps = QueryEntities{type='filter-pump'}
+end
 
 function InitGlobal()
 	if global.pumps == nil then
-		Populate()
+		PopulatePumps()
 	end
+
+	if global.wagons == nil then
+		global.wagons = {}
+	end
+end
+
+function OnEntityBuilt(event)
+	RegisterPump(event.created_entity)
 end
 
 function OnGuiOpened(event)
@@ -28,22 +59,24 @@ function OnGuiOpened(event)
 		return
 	end
 
-	local isPump = event.entity.prototype.name == 'filter-pump'
-	local isWagon = event.entity.prototype.name == 'filter-fluid-wagon'
+	local isPump = event.entity.name == 'filter-pump'
+	local isWagon = event.entity.name == 'filter-fluid-wagon'
 	-- TODO wagons may have (with other mods) or may not have (vanilla) own frame
 	-- need to detect that and skip wagon UI
-	local hasOwnUI = true
+	local hasOwnUI = isPump
 	if isPump or isWagon then
-		if isWagon then
+		if hasOwnUI then
+			OpenFluidFilterPanel(player, event.entity)
+		else
 			OpenWagonUI(player, event.entity)
 		end
-		OpenFilterBox(player, event.entity)
 	end
 end
 
 function OpenWagonUI(player, entity)
 	local wagonFrame = player.gui.screen[WAGON_FRAME_NAME]
 	local preview = nil
+	local chooseButton = nil
 	if wagonFrame == nil then
 		wagonFrame = player.gui.screen.add{type='frame', name=WAGON_FRAME_NAME}
 		wagonFrame.auto_center = true
@@ -75,21 +108,35 @@ function OpenWagonUI(player, entity)
 		statusFlow.add{type='label', caption={'entity-status.working'}}
 
 		local previewContainer = contentFlow.add{type='frame', style='slot_container_frame'}
+		previewContainer.style.bottom_margin = 4
 		preview = previewContainer.add{type='entity-preview', style='wide_entity_button'}
+
+		local label = contentFlow.add{type='label', caption='Filter:', style='bold_label'}
+		label.style.top_margin = 4
+		chooseButton = contentFlow.add{type='choose-elem-button', name=CHOOSE_BUTTON_NAME, elem_type='fluid'}
 	else
 		--        wagonFrame/mainFlow/contentFrame/contentFlow/previewContainer/preview
 		preview = wagonFrame.children[1].children[2].children[1].children[2].children[1]
+
+		--             wagonFrame/mainFlow/contentFrame/contentFlow/chooseButton
+		chooseButton = wagonFrame.children[1].children[2].children[1].children[4]
 	end
 
-	preview.entity = entity
 	player.opened = wagonFrame
+
+	preview.entity = entity
+
+	local filter = global.wagons[entity.unit_number]
+	chooseButton.elem_value = filter and filter[2] or nil
+
+	g_SelectedEntity = entity
 end
 
-function OpenFilterBox(player, entity)
+function OpenFluidFilterPanel(player, entity)
 	local filterFrame = player.gui.relative[FILTER_FRAME_NAME]
 	if filterFrame == nil then
 		local anchor = {
-			gui = defines.relative_gui_type.entity_with_energy_source_gui, -- ???
+			gui = defines.relative_gui_type.entity_with_energy_source_gui,
 			position = defines.relative_gui_position.bottom,
 			names = {'filter-pump', 'filter-fluid-wagon'}
 		}
@@ -116,10 +163,19 @@ function CloseWagonUI(element)
 end
 
 function SetFilter(playerIndex, fluid)
-	if fluid == nil then
-		g_SelectedEntity.fluidbox.set_filter(1, nil)
-	else
-		g_SelectedEntity.fluidbox.set_filter(1, {name=fluid, force=true})
+	if g_SelectedEntity.name == 'filter-pump' then
+		if fluid == nil then
+			g_SelectedEntity.fluidbox.set_filter(1, nil)
+		else
+			g_SelectedEntity.fluidbox.set_filter(1, {name=fluid, force=true})
+		end
+	else -- wagon
+		if fluid == nil then
+			global.wagons[g_SelectedEntity.unit_number] = nil
+		else
+			global.wagons[g_SelectedEntity.unit_number] = {g_SelectedEntity, fluid}
+			script.register_on_entity_destroyed(g_SelectedEntity)
+		end
 	end
 
 	local player = game.get_player(playerIndex)
@@ -133,15 +189,26 @@ function RegisterPump(entity)
 	script.register_on_entity_destroyed(entity)
 end
 
-function UnregisterPump(uid)
+function UnregisterEntity(uid)
+	global.wagons[uid] = nil
 	global.pumps[uid] = nil
-	g_InputPositionCache[uid] = nil
+	g_PumpConnectionsCache[uid] = nil
+end
+
+function Contains(bbox, pos)
+	local topLeft = bbox.left_top or bbox[1]
+	local bottomRight = bbox.right_bottom or bbox[2]
+	topLeft = {topLeft.x or topLeft[1], topLeft.y or topLeft[2]}
+	bottomRight = {bottomRight.x or bottomRight[1], bottomRight.y or bottomRight[2]}
+	pos = {pos.x or pos[1], pos.y or pos[2]}
+	return pos[1] >= topLeft[1] and pos[1] <= bottomRight[1] and
+			pos[2] >= topLeft[2] and pos[2] <= bottomRight[2]
 end
 
 function GetInputPosition(entity)
-	if g_InputPositionCache[entity.unit_number] == nil then
+	if g_PumpConnectionsCache[entity.unit_number] == nil or g_PumpConnectionsCache[entity.unit_number][1] == nil then
 		local offset = nil
-		for i, connection in ipairs(entity.prototype.fluidbox_prototypes[1].pipe_connections) do
+		for _, connection in ipairs(entity.prototype.fluidbox_prototypes[1].pipe_connections) do
 			if connection.type == 'input' then
 				local dirIdx = entity.direction / 2 + 1
 				offset = connection.positions[dirIdx]
@@ -151,29 +218,77 @@ function GetInputPosition(entity)
 
 		local pos = entity.position
 		pos = {(pos[1] or pos.x) + (offset[1] or offset.x), (pos[2] or pos.y) + (offset[2] or offset.y)}
-		g_InputPositionCache[entity.unit_number] = pos
+
+		g_PumpConnectionsCache[entity.unit_number] = {}
+		if Contains(entity.pump_rail_target.bounding_box, pos) then
+			g_PumpConnectionsCache[entity.unit_number][1] = pos
+		else
+			g_PumpConnectionsCache[entity.unit_number][1] = {}
+		end
 	end
-	return g_InputPositionCache[entity.unit_number]
+	return g_PumpConnectionsCache[entity.unit_number][1]
+end
+
+function GetOutputPosition(entity)
+	if g_PumpConnectionsCache[entity.unit_number] == nil or g_PumpConnectionsCache[entity.unit_number][2] == nil then
+		local offset = nil
+		for _, connection in ipairs(entity.prototype.fluidbox_prototypes[1].pipe_connections) do
+			if connection.type == 'output' then
+				local dirIdx = entity.direction / 2 + 1
+				offset = connection.positions[dirIdx]
+				break
+			end
+		end
+
+		local pos = entity.position
+		pos = {(pos[1] or pos.x) + (offset[1] or offset.x), (pos[2] or pos.y) + (offset[2] or offset.y)}
+
+		g_PumpConnectionsCache[entity.unit_number] = {}
+		if Contains(entity.pump_rail_target.bounding_box, pos) then
+			g_PumpConnectionsCache[entity.unit_number][2] = pos
+		else
+			g_PumpConnectionsCache[entity.unit_number][2] = {}
+		end
+	end
+	return g_PumpConnectionsCache[entity.unit_number][2]
 end
 
 function ShouldEnablePump(pump)
-	if pump.pump_rail_target == nil then
+	local railTarget = pump.pump_rail_target
+	if railTarget == nil then
+		g_PumpConnectionsCache[pump.unit_number] = nil
 		return true
 	end
 
 	local pumpFbox = pump.fluidbox
 	local pumpFilter = pumpFbox.get_filter(1)
-	if pumpFilter == nil then
-		return true
+	if pumpFilter ~= nil then
+		local inputPos = GetInputPosition(pump)
+		if next(inputPos) ~= nil then
+			local wagons = railTarget.surface.find_entities_filtered{area=railTarget.bounding_box, type='fluid-wagon'}
+			-- normally there should be only 1 wagon
+			for _, wagon in ipairs(wagons) do
+				local wagonFluid = wagon.fluidbox[1]
+				if wagonFluid ~= nil and wagonFluid.amount > 0 and wagonFluid.name ~= pumpFilter.name then
+					return false
+				end
+			end
+		end
 	end
 
-	local inputPos = GetInputPosition(pump)
-	local wagons = pump.pump_rail_target.surface.find_entities_filtered{area={inputPos, inputPos}, type='fluid-wagon'}
-	-- normally there should be only 1 wagon
-	for i, wagon in ipairs(wagons) do
-		local wagonFluid = wagon.fluidbox[1]
-		if wagonFluid ~= nil and wagonFluid.amount > 0 and wagonFluid.name ~= pumpFilter.name then
-			return false
+	local pumpFluid = #(pumpFbox) > 0 and pumpFbox[1] ~=nil and pumpFbox[1].amount > 0 and pumpFbox[1].name or nil
+	if pumpFluid ~= nil then
+		local outputPos = GetOutputPosition(pump)
+		if next(outputPos) ~= nil then
+			local wagons = railTarget.surface.find_entities_filtered{area=railTarget.bounding_box, type='fluid-wagon'}
+			-- normally there should be only 1 wagon
+			for _, wagon in ipairs(wagons) do
+				local wagonEntry = global.wagons[wagon.unit_number]
+				local wagonFilter = wagonEntry and wagonEntry[2] or nil
+				if wagonFilter ~= nil and wagonFilter ~= pumpFluid then
+					return false
+				end
+			end
 		end
 	end
 
@@ -199,9 +314,9 @@ script.on_configuration_changed(InitGlobal)
 
 script.on_nth_tick(PUMP_WAGON_CHECK_PERIOD, VerifyPumps)
 
-local entityFilters = {{filter='name', name='filter-pump'}}
-script.on_event(defines.events.on_built_entity, RegisterPump, entityFilters)
-script.on_event(defines.events.on_robot_built_entity, RegisterPump, entityFilters)
+local entityFilters = {{filter='type', type='pump'}}
+script.on_event(defines.events.on_built_entity, OnEntityBuilt, entityFilters)
+script.on_event(defines.events.on_robot_built_entity, OnEntityBuilt, entityFilters)
 
 script.on_event('open_gui', function(event)
 	local player = game.get_player(event.player_index)
@@ -231,50 +346,101 @@ end)
 script.on_event(defines.events.on_gui_closed, function(event)
 	if event.element and event.element.name == WAGON_FRAME_NAME then
 		event.element.destroy()
-		-- filter?
 	end
 end)
 
 script.on_event(defines.events.on_entity_destroyed, function(event)
 	if event.unit_number ~= nil then
-		UnregisterPump(event.unit_number)
+		UnregisterEntity(event.unit_number)
 	end
 end)
 
 script.on_event(defines.events.on_player_rotated_entity, function(event)
-	g_InputPositionCache[event.entity.unit_number] = nil
+	g_PumpConnectionsCache[event.entity.unit_number] = nil
 end)
 
 --script.on_event(defines.events.on_entity_settings_pasted
 
 -- debug stuff
 
+function Clear()
+	global.pumps = {}
+	game.player.print('Pumps are cleared')
+
+	global.wagons = {}
+	game.player.print('Wagons are cleared')
+
+	g_PumpConnectionsCache = {}
+	game.player.print('Cache is cleared')
+end
+
 function PrintPumps()
 	game.player.print('=== Registered pumps ===')
 	for uid, pump in pairs(global.pumps) do
 		local filter = pump.fluidbox.get_filter(1)
-		game.player.print('Pump ' .. uid .. ': ' .. (pump.active and 'enabled' or 'disabled') .. (filter and (' [' .. filter.name .. ']' or '')))
+		game.player.print('Pump ' .. uid .. ': ' .. (pump.active and 'enabled' or 'disabled') .. (filter and (' [' .. filter.name .. ']') or ''))
 	end
 	game.player.print('========== END =========')
 end
 
-function Clear()
-	global.pumps = {}
-	game.player.print('Pumps are cleared')
-end
-
-function Populate()
-	global.pumps = {}
-	for i, player in ipairs(game.connected_players) do
-		if player ~= nil and player.surface ~= nil then
-			local entities = player.surface.find_entities_filtered{area=nil, name='filter-pump'}
-			for j, entity in ipairs(entities) do
-				global.pumps[entity.unit_number] = entity
-			end
-		end
+function PrintWagons()
+	game.player.print('=== Registered wagons ===')
+	for uid, wagonEntry in pairs(global.wagons) do
+		local filter = wagonEntry[2]
+		game.player.print('Wagon ' .. uid .. ': ' .. (filter or 'none'))
 	end
+	game.player.print('========== END =========')
 end
 
-commands.add_command('ff.print', nil, PrintPumps)
 commands.add_command('ff.reset', nil, Clear)
-commands.add_command('ff.populate', nil, Populate)
+commands.add_command('ff.print_pumps', nil, PrintPumps)
+commands.add_command('ff.print_wagons', nil, PrintWagons)
+commands.add_command('ff.populate_pumps', nil, PopulatePumps)
+
+--[[
+
+tests:
+
+-- vanilla stuff
+water: pipe -> pump               -> pipe        | yes
+water: pipe -> pump               -> fluid-wagon | yes
+water: fluid-wagon -> pump        -> pipe        | yes
+
+-- filter-pump with vanilla stuff
+water: pipe -> filter-pump[water] -> pipe        | yes
+steam: pipe -> filter-pump[water] -> pipe        | no
+water: pipe -> filter-pump[]      -> pipe        | yes
+steam: pipe -> filter-pump[]      -> pipe        | yes
+water: tank -> filter-pump[water] -> pipe        | yes
+steam: tank -> filter-pump[water] -> pipe        | no
+water: pipe -> filter-pump[water] -> tank        | yes
+steam: pipe -> filter-pump[water] -> tank        | no
+
+-- filter-pump with vanilla wagons 
+water: fluid-wagon -> filter-pump[water] -> pipe | yes
+steam: fluid-wagon -> filter-pump[water] -> pipe | no
+water: fluid-wagon -> filter-pump[]      -> pipe | yes
+steam: fluid-wagon -> filter-pump[]      -> pipe | yes
+water: pipe -> filter-pump[water] -> fluid-wagon | yes
+steam: pipe -> filter-pump[water] -> fluid-wagon | no
+water: pipe -> filter-pump[]      -> fluid-wagon | yes
+steam: pipe -> filter-pump[]      -> fluid-wagon | yes
+
+-- filter-fluid-wagon with vanilla stuff
+water: pipe -> pump -> filter-fluid-wagon[]      | yes
+water: pipe -> pump -> filter-fluid-wagon[water] | yes
+steam: pipe -> pump -> filter-fluid-wagon[water] | no
+water: filter-fluid-wagon[] -> pump -> pipe      | yes
+water: filter-fluid-wagon[water] -> pump -> pipe | yes
+
+-- filter-pumps with filter-fluid-wagons
+water: filter-fluid-wagon[]      -> filter-pump[water] -> pipe | yes
+steam: filter-fluid-wagon[]      -> filter-pump[water] -> pipe | no
+water: filter-fluid-wagon[]      -> filter-pump[]      -> pipe | yes
+steam: filter-fluid-wagon[]      -> filter-pump[]      -> pipe | yes
+water: filter-fluid-wagon[water] -> filter-pump[water] -> pipe | yes
+steam: filter-fluid-wagon[steam] -> filter-pump[water] -> pipe | no
+water: filter-fluid-wagon[water] -> filter-pump[]      -> pipe | yes
+steam: filter-fluid-wagon[steam] -> filter-pump[]      -> pipe | yes
+
+]]
