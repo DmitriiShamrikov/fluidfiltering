@@ -31,7 +31,7 @@ function QueryEntities(filter, fn)
 end
 
 function PopulatePumps()
-	global.pumps = QueryEntities{type='filter-pump'}
+	global.pumps = QueryEntities{type='pump'}
 end
 
 function InitGlobal()
