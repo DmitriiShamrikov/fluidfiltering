@@ -133,19 +133,23 @@ function OpenWagonUI(player, entity)
 end
 
 function OpenFluidFilterPanel(player, entity)
-	local filterFrame = player.gui.relative[FILTER_FRAME_NAME]
-	if filterFrame == nil then
+	local panelFrame = player.gui.relative[FILTER_FRAME_NAME]
+	local chooseButton = nil
+	if panelFrame == nil then
 		local anchor = {
 			gui = defines.relative_gui_type.entity_with_energy_source_gui,
 			position = defines.relative_gui_position.bottom,
-			names = {'filter-pump', 'filter-fluid-wagon'}
+			names = {'filter-pump'}
 		}
-		filterFrame = player.gui.relative.add{type='frame', name=FILTER_FRAME_NAME, caption='Filter', anchor=anchor}
-		filterFrame.add{type='choose-elem-button', name=CHOOSE_BUTTON_NAME, elem_type='fluid'}
+		panelFrame = player.gui.relative.add{type='frame', name=FILTER_FRAME_NAME, caption='Filter', anchor=anchor}
+		local contentFrame = panelFrame.add{type='frame', style='inside_shallow_frame_with_padding'}
+		chooseButton = contentFrame.add{type='choose-elem-button', name=CHOOSE_BUTTON_NAME, elem_type='fluid'}
+	else
+		chooseButton = panelFrame.children[1].children[1]
 	end
 
 	local filter = entity.fluidbox.get_filter(1)
-	filterFrame[CHOOSE_BUTTON_NAME].elem_value = filter and filter.name or nil
+	chooseButton.elem_value = filter and filter.name or nil
 
 	g_SelectedEntity = entity
 end
