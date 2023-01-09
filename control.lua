@@ -1,4 +1,4 @@
-local WAGON_FRAME_NAME = 'ui-wagon'
+local ENTITY_FRAME_NAME = 'ui-entity'
 local FILTER_FRAME_NAME = 'ui-liquid-filter'
 local CHOOSE_BUTTON_NAME = 'ui-liquid-filter-chooser'
 local CLOSE_BUTTON_NAME = 'ui-close'
@@ -61,32 +61,33 @@ function OnGuiOpened(event)
 
 	local isPump = event.entity.name == 'filter-pump'
 	local isWagon = event.entity.name == 'filter-fluid-wagon'
-	-- TODO wagons may have (with other mods) or may not have (vanilla) own frame
-	-- need to detect that and skip wagon UI
-	local hasOwnUI = isPump
+	local hasMainlUI = event.name == defines.events.on_gui_opened
 	if isPump or isWagon then
-		if hasOwnUI then
+		if hasMainlUI then
 			OpenFluidFilterPanel(player, event.entity)
 		else
-			OpenWagonUI(player, event.entity)
+			OpenEntityWindow(player, event.entity)
 		end
+
+		g_SelectedEntity = event.entity
 	end
 end
 
-function OpenWagonUI(player, entity)
-	local wagonFrame = player.gui.screen[WAGON_FRAME_NAME]
+function OpenEntityWindow(player, entity)
+	local entityFrame = player.gui.screen[ENTITY_FRAME_NAME]
 	local preview = nil
 	local chooseButton = nil
-	if wagonFrame == nil then
-		wagonFrame = player.gui.screen.add{type='frame', name=WAGON_FRAME_NAME}
-		wagonFrame.auto_center = true
+	local title = nil
+	if entityFrame == nil then
+		entityFrame = player.gui.screen.add{type='frame', name=ENTITY_FRAME_NAME}
+		entityFrame.auto_center = true
 
-		local mainFlow = wagonFrame.add{type='flow', direction='vertical'}
+		local mainFlow = entityFrame.add{type='flow', direction='vertical'}
 
 		local titleFlow = mainFlow.add{type='flow', direction='horizontal'}
-		titleFlow.drag_target = wagonFrame
+		titleFlow.drag_target = entityFrame
 		titleFlow.style.horizontal_spacing = 12
-		titleFlow.add{type='label', ignored_by_interaction=true, style='frame_title', caption='Filter fluid wagon'}
+		title = titleFlow.add{type='label', ignored_by_interaction=true, style='frame_title'}
 		titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler_style'}
 		titleFlow.add{
 			type='sprite-button',
@@ -115,65 +116,80 @@ function OpenWagonUI(player, entity)
 		label.style.top_margin = 4
 		chooseButton = contentFlow.add{type='choose-elem-button', name=CHOOSE_BUTTON_NAME, elem_type='fluid'}
 	else
-		--        wagonFrame/mainFlow/contentFrame/contentFlow/previewContainer/preview
-		preview = wagonFrame.children[1].children[2].children[1].children[2].children[1]
+		--      entityFrame/mainFlow/titleFlow/title
+		title = entityFrame.children[1].children[2].children[1]
 
-		--             wagonFrame/mainFlow/contentFrame/contentFlow/chooseButton
-		chooseButton = wagonFrame.children[1].children[2].children[1].children[4]
+		--        entityFrame/mainFlow/contentFrame/contentFlow/previewContainer/preview
+		preview = entityFrame.children[1].children[2].children[1].children[2].children[1]
+
+		--             entityFrame/mainFlow/contentFrame/contentFlow/chooseButton
+		chooseButton = entityFrame.children[1].children[2].children[1].children[4]
 	end
 
-	player.opened = wagonFrame
-
+	title.caption = entity.localised_name
 	preview.entity = entity
-
 	local filter = global.wagons[entity.unit_number]
 	chooseButton.elem_value = filter and filter[2] or nil
 
-	g_SelectedEntity = entity
+	player.opened = entityFrame
 end
 
 function OpenFluidFilterPanel(player, entity)
-	local panelFrame = player.gui.relative[FILTER_FRAME_NAME]
+	local guiType = nil
+	local filterFluid = nil
+	if entity.type == 'pump' then
+		local filter = entity.fluidbox.get_filter(1)
+		filterFluid = filter and filter.name or nil
+		guiType = defines.relative_gui_type.entity_with_energy_source_gui
+	elseif entity.type == 'fluid-wagon' then
+		local filter = global.wagons[entity.unit_number]
+		filterFluid = filter and filter[2] or nil
+		if entity.prototype.grid_prototype ~= nil then
+			guiType = defines.relative_gui_type.equipment_grid_gui
+		else
+			guiType = defines.relative_gui_type.additional_entity_info_gui -- for editor only
+		end
+	else
+		return
+	end
+
+	local frameName = FILTER_FRAME_NAME .. '-' .. guiType
+	local panelFrame = player.gui.relative[frameName]
 	local chooseButton = nil
 	if panelFrame == nil then
 		local anchor = {
-			gui = defines.relative_gui_type.entity_with_energy_source_gui,
+			gui = guiType,
 			position = defines.relative_gui_position.bottom,
-			names = {'filter-pump'}
+			names = {'filter-pump', 'filter-fluid-wagon'}
 		}
-		panelFrame = player.gui.relative.add{type='frame', name=FILTER_FRAME_NAME, caption='Filter', anchor=anchor}
+		panelFrame = player.gui.relative.add{type='frame', name=frameName, caption='Filter', anchor=anchor}
 		local contentFrame = panelFrame.add{type='frame', style='inside_shallow_frame_with_padding'}
 		chooseButton = contentFrame.add{type='choose-elem-button', name=CHOOSE_BUTTON_NAME, elem_type='fluid'}
 	else
 		chooseButton = panelFrame.children[1].children[1]
 	end
 
-	local filter = entity.fluidbox.get_filter(1)
-	chooseButton.elem_value = filter and filter.name or nil
-
-	g_SelectedEntity = entity
+	chooseButton.elem_value = filterFluid
 end
 
-function CloseWagonUI(element)
-	if element.name == CLOSE_BUTTON_NAME then
-		while element ~= nil do
-			if element.name == WAGON_FRAME_NAME then
-				element.destroy()
-				break
-			end
-			element = element.parent
+function CloseEntityWindow(element)
+	while element ~= nil do
+		if element.name == ENTITY_FRAME_NAME then
+			element.destroy()
+			break
 		end
+		element = element.parent
 	end
 end
 
 function SetFilter(playerIndex, fluid)
-	if g_SelectedEntity.name == 'filter-pump' then
+	if g_SelectedEntity.type == 'pump' then
 		if fluid == nil then
 			g_SelectedEntity.fluidbox.set_filter(1, nil)
 		else
 			g_SelectedEntity.fluidbox.set_filter(1, {name=fluid, force=true})
 		end
-	else -- wagon
+	else -- fluid-wagon
 		if fluid == nil then
 			global.wagons[g_SelectedEntity.unit_number] = nil
 		else
@@ -324,7 +340,7 @@ script.on_event(defines.events.on_robot_built_entity, OnEntityBuilt, entityFilte
 
 script.on_event('open_gui', function(event)
 	local player = game.get_player(event.player_index)
-	if player == nil or player.selected == nil then
+	if player == nil or player.selected == nil or player.selected == g_SelectedEntity then
 		return
 	end
 
@@ -336,20 +352,22 @@ end)
 script.on_event(defines.events.on_gui_opened, OnGuiOpened)
 
 script.on_event(defines.events.on_gui_elem_changed, function(event)
-	if g_SelectedEntity == nil or event.element.name ~= CHOOSE_BUTTON_NAME then
-		return
+	if g_SelectedEntity ~= nil and event.element.name == CHOOSE_BUTTON_NAME then
+		SetFilter(event.player_index, event.element.elem_value)
 	end
-
-	SetFilter(event.player_index, event.element.elem_value)
 end)
 
 script.on_event(defines.events.on_gui_click, function(event)
-	CloseWagonUI(event.element)
+	if event.element.name == CLOSE_BUTTON_NAME then
+		CloseEntityWindow(event.element)
+		g_SelectedEntity = nil
+	end
 end)
 
 script.on_event(defines.events.on_gui_closed, function(event)
-	if event.element and event.element.name == WAGON_FRAME_NAME then
+	if event.element and event.element.name == ENTITY_FRAME_NAME then
 		event.element.destroy()
+		g_SelectedEntity = nil
 	end
 end)
 
