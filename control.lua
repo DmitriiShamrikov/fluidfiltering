@@ -48,6 +48,35 @@ function OnEntityBuilt(event)
 	RegisterPump(event.created_entity)
 end
 
+function OnSettingsPasted(event)
+	if event.source.type == 'pump' and event.destination.name == 'filter-pump' then
+		-- that shouldn't noramlly happen, just being extra careful
+		if global.pumps[event.source.unit_number] == nil then
+			global.pumps[event.source.unit_number] = event.source
+		end
+		if global.pumps[event.destination.unit_number] == nil then
+			global.pumps[event.destination.unit_number] = event.destination
+		end
+
+		local filter = event.source.fluidbox.get_filter(1)
+		filter.force = true
+		event.destination.fluidbox.set_filter(1, filter)
+	elseif event.source.type == 'fluid-wagon' and event.destination.name == 'filter-fluid-wagon' then
+		local filter = global.wagons[event.source.unit_number] and global.wagons[event.source.unit_number][2] or nil
+		if filter == nil then
+			global.wagons[event.destination.unit_number] = nil
+		else
+			global.wagons[event.destination.unit_number] = {event.destination, filter}
+			script.register_on_entity_destroyed(event.destination)
+
+			local wagonFluid = event.destination.fluidbox[1]
+			if wagonFluid ~= nil and wagonFluid.amount > 0 and wagonFluid.name ~= filter then
+				event.destination.fluidbox[1] = nil
+			end
+		end
+	end
+end
+
 function OnGuiOpened(event)
 	g_SelectedEntity = nil
 	if event.gui_type ~= defines.gui_type.entity or event.entity == nil then
@@ -338,6 +367,7 @@ local entityFilters = {{filter='type', type='pump'}}
 script.on_event(defines.events.on_built_entity, OnEntityBuilt, entityFilters)
 script.on_event(defines.events.on_robot_built_entity, OnEntityBuilt, entityFilters)
 
+script.on_event(defines.events.on_gui_opened, OnGuiOpened)
 script.on_event('open_gui', function(event)
 	local player = game.get_player(event.player_index)
 	if player == nil or player.selected == nil or player.selected == g_SelectedEntity then
@@ -348,8 +378,6 @@ script.on_event('open_gui', function(event)
 	event.entity = player.selected
 	OnGuiOpened(event)
 end)
-
-script.on_event(defines.events.on_gui_opened, OnGuiOpened)
 
 script.on_event(defines.events.on_gui_elem_changed, function(event)
 	if g_SelectedEntity ~= nil and event.element.name == CHOOSE_BUTTON_NAME then
@@ -381,7 +409,7 @@ script.on_event(defines.events.on_player_rotated_entity, function(event)
 	g_PumpConnectionsCache[event.entity.unit_number] = nil
 end)
 
---script.on_event(defines.events.on_entity_settings_pasted
+script.on_event(defines.events.on_entity_settings_pasted, OnSettingsPasted)
 
 -- debug stuff
 
