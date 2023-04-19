@@ -46,6 +46,28 @@ end
 
 function OnEntityBuilt(event)
 	RegisterPump(event.created_entity)
+	if event.tags then
+		local filter = event.tags['filter']
+		if filter then
+			event.created_entity.fluidbox.set_filter(1, {name=filter, force=true})
+
+			local player = game.get_player(event.player_index)
+			if player ~= nil then
+				player.print('Setting filter for entity ' .. event.created_entity.unit_number .. ': ' .. filter)
+			end
+		end
+	end
+end
+
+function RegisterPump(entity)
+	global.pumps[entity.unit_number] = entity
+	script.register_on_entity_destroyed(entity)
+end
+
+function UnregisterEntity(uid)
+	global.wagons[uid] = nil
+	global.pumps[uid] = nil
+	g_PumpConnectionsCache[uid] = nil
 end
 
 function OnSettingsPasted(event)
@@ -76,6 +98,33 @@ function OnSettingsPasted(event)
 		end
 	end
 end
+
+function OnBlueprintSelected(event)
+	local player = game.get_player(event.player_index)
+	if player == nil then
+		return
+	end
+
+	local bp = nil
+	if player.cursor_stack and player.cursor_stack.valid_for_read and player.cursor_stack.name == 'blueprint' then
+		bp = player.cursor_stack -- this is for Ctrl+C
+	elseif player.blueprint_to_setup and player.blueprint_to_setup.valid_for_read then
+		bp = player.blueprint_to_setup -- this is for Create Blueprint button
+	end
+
+	-- we can handle both cases here because entities can't be added in blueprint configuration window
+
+	for bpIndex, entity in ipairs(event.mapping.get()) do
+		if global.pumps[entity.unit_number] ~= nil then
+			local filter = entity.fluidbox.get_filter(1)
+			if filter then
+				bp.set_blueprint_entity_tag(bpIndex, 'filter', filter.name)
+			end
+		end
+	end
+end
+
+------- UI ------
 
 function OnGuiOpened(event)
 	g_SelectedEntity = nil
@@ -229,20 +278,11 @@ function SetFilter(playerIndex, fluid)
 
 	local player = game.get_player(playerIndex)
 	if player ~= nil then
-		player.print('Setting filter for the entity ' .. g_SelectedEntity.unit_number .. ': ' .. (fluid or 'none'))
+		player.print('Setting filter for entity ' .. g_SelectedEntity.unit_number .. ': ' .. (fluid or 'none'))
 	end
 end
 
-function RegisterPump(entity)
-	global.pumps[entity.unit_number] = entity
-	script.register_on_entity_destroyed(entity)
-end
-
-function UnregisterEntity(uid)
-	global.wagons[uid] = nil
-	global.pumps[uid] = nil
-	g_PumpConnectionsCache[uid] = nil
-end
+------ Update -----
 
 function Contains(bbox, pos)
 	local topLeft = bbox.left_top or bbox[1]
@@ -410,6 +450,7 @@ script.on_event(defines.events.on_player_rotated_entity, function(event)
 end)
 
 script.on_event(defines.events.on_entity_settings_pasted, OnSettingsPasted)
+script.on_event(defines.events.on_player_setup_blueprint, OnBlueprintSelected)
 
 -- debug stuff
 
