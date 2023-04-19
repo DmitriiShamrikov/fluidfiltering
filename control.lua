@@ -81,7 +81,9 @@ function OnSettingsPasted(event)
 		end
 
 		local filter = event.source.fluidbox.get_filter(1)
-		filter.force = true
+		if filter then
+			filter.force = true
+		end
 		event.destination.fluidbox.set_filter(1, filter)
 	elseif event.source.type == 'fluid-wagon' and event.destination.name == 'filter-fluid-wagon' then
 		local filter = global.wagons[event.source.unit_number] and global.wagons[event.source.unit_number][2] or nil
