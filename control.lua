@@ -11,6 +11,9 @@ local PUMP_WAGON_CHECK_PERIOD = 1
 local g_SelectedEntity = nil
 local g_PumpConnectionsCache = {}
 
+-- global.pumps - array of entities
+-- global.wagons - array of entries, each entry is a pair of entity and a filter (string)
+
 function QueryEntities(filter, fn)
 	local surfaces = {}
 	for _, player in ipairs(game.connected_players) do
@@ -143,7 +146,7 @@ function OnGuiOpened(event)
 	local isWagon = event.entity.name == 'filter-fluid-wagon'
 	local hasMainlUI = event.name == defines.events.on_gui_opened
 	if isPump or isWagon then
-		if hasMainlUI then
+		if isWagon and hasMainlUI then
 			OpenFluidFilterPanel(player, event.entity)
 		else
 			OpenEntityWindow(player, event.entity)
@@ -155,9 +158,11 @@ end
 
 function OpenEntityWindow(player, entity)
 	local entityFrame = player.gui.screen[ENTITY_FRAME_NAME]
+	local title = nil
 	local preview = nil
 	local chooseButton = nil
-	local title = nil
+	local statusSprite = nil
+	local statusText = nil
 	if entityFrame == nil then
 		entityFrame = player.gui.screen.add{type='frame', name=ENTITY_FRAME_NAME}
 		entityFrame.auto_center = true
@@ -185,8 +190,8 @@ function OpenEntityWindow(player, entity)
 		statusFlow.style.vertical_align = 'center'
 		statusFlow.style.top_margin = -4
 		statusFlow.style.bottom_margin = 4
-		statusFlow.add{type='sprite', sprite='utility/status_working'}
-		statusFlow.add{type='label', caption={'entity-status.working'}}
+		statusSprite = statusFlow.add{type='sprite'}
+		statusText = statusFlow.add{type='label'}
 
 		local previewContainer = contentFlow.add{type='frame', style='slot_container_frame'}
 		previewContainer.style.bottom_margin = 4
@@ -204,12 +209,44 @@ function OpenEntityWindow(player, entity)
 
 		--             entityFrame/mainFlow/contentFrame/contentFlow/chooseButton
 		chooseButton = entityFrame.children[1].children[2].children[1].children[4]
+
+		--             entityFrame/mainFlow/contentFrame/contentFlow/statusFlow/statusSprite
+		statusSprite = entityFrame.children[1].children[2].children[1].children[1].children[1]
+
+		--           entityFrame/mainFlow/contentFrame/contentFlow/statusFlow/statusText
+		statusText = entityFrame.children[1].children[2].children[1].children[1].children[2]
 	end
 
 	title.caption = entity.localised_name
 	preview.entity = entity
-	local filter = global.wagons[entity.unit_number]
-	chooseButton.elem_value = filter and filter[2] or nil
+
+	if entity.status == defines.entity_status.normal or entity.status == defines.entity_status.working or entity.status == nil then
+		statusSprite.sprite = 'utility/status_working'
+	elseif entity.status == defines.entity_status.low_power then
+		statusSprite.sprite = 'utility/status_yellow'
+	else
+		statusSprite.sprite = 'utility/status_not_working'
+	end
+
+	local statusName = nil
+	for key, value in pairs(defines.entity_status) do
+		if value == entity.status then
+			statusName = key
+			break
+		end
+	end
+	statusText.caption = {'entity-status.' .. (statusName and statusName:gsub('_', '-') or 'normal')}
+
+	local filter = nil
+	if global.wagons[entity.unit_number] then
+		filter = global.wagons[entity.unit_number][2]
+	elseif global.pumps[entity.unit_number] then
+		local f = global.pumps[entity.unit_number].fluidbox.get_filter(1)
+		if f then
+			filter = f.name
+		end
+	end
+	chooseButton.elem_value = filter
 
 	player.opened = entityFrame
 end
