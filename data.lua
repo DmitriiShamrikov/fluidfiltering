@@ -54,6 +54,18 @@ styles.header_filler_style = {
 	height = 24
 }
 
+styles.left_column = {
+	type = "vertical_flow_style",
+	minimal_width = styles["wide_entity_button"].minimal_width / 2,
+	horizontal_align = "left"
+}
+
+styles.right_column = {
+	type = "vertical_flow_style",
+	minimal_width = styles["wide_entity_button"].minimal_width / 2,
+	horizontal_align = "right"
+}
+
 -- input
 data:extend{{
 	type = "custom-input",
