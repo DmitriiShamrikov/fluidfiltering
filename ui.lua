@@ -5,6 +5,7 @@ local CIRCUIT_BUTTON_NAME = 'ui-circuit'
 local LOGISTIC_BUTTON_NAME = 'ui-logistic'
 local CHOOSE_FILTER_BUTTON_NAME = 'ui-liquid-filter-chooser'
 local CHOOSE_SIGNAL_BUTTON_NAME = 'ui-signal-chooser'
+local SET_FILTER_CHECKBOX_NAME = 'ui-circuit-filter-checkbox'
 
 local SIGNAL_FRAME_NAME = 'ui-signal'
 local SEARCH_BUTTON_NAME = 'ui-search'
@@ -84,16 +85,19 @@ function OpenEntityWindow(player, entity)
 		elements.chooseButton = FindElementByName(entityFrame, CHOOSE_FILTER_BUTTON_NAME)
 		elements.redNetworkId = FindElementByName(entityFrame, 'redNetworkId')
 		elements.greenNetworkId = FindElementByName(entityFrame, 'greenNetworkId')
+		elements.setFilterBox = FindElementByName(entityFrame, SET_FILTER_CHECKBOX_NAME)
 	end
 
 	elements.title.caption = entity.localised_name
 	elements.preview.entity = entity
 
+	--[[
 	elements.circuitButton.visible = isPump and (IsCircuitNetworkUnlocked(player) or IsConnectedToCircuitNetwork(entity))
 	elements.circuitButton.toggled = isPump and IsConnectedToCircuitNetwork(entity)
 
 	elements.logisticButton.visible = isPump
 	elements.logisticButton.toggled = isPump and not elements.circuitButton.toggled and IsConnectedToLogisticNetwork(entity)
+	]]
 
 	if entity.status == defines.entity_status.normal or entity.status == defines.entity_status.working or entity.status == nil then
 		elements.statusSprite.sprite = 'utility/status_working'
@@ -112,17 +116,9 @@ function OpenEntityWindow(player, entity)
 	end
 	elements.statusText.caption = {'entity-status.' .. (statusName and statusName:gsub('_', '-') or 'normal')}
 
-	local filter = nil
-	if global.wagons[entity.unit_number] then
-		filter = global.wagons[entity.unit_number][2]
-	elseif global.pumps[entity.unit_number] then
-		local f = global.pumps[entity.unit_number].fluidbox.get_filter(1)
-		if f then
-			filter = f.name
-		end
-	end
-	elements.chooseButton.elem_value = filter
+	FillFilterButton(elements.chooseButton, entity)
 
+	--[[
 	if ToggleCircuitNetworkBlock(player, entity, elements.circuitButton) then
 		local redNetwork = entity.get_circuit_network(defines.wire_type.red)
 		local greenNetwork = entity.get_circuit_network(defines.wire_type.green)
@@ -140,8 +136,31 @@ function OpenEntityWindow(player, entity)
 	elseif ToggleLogisticNetworkBlock(player, entity, elements.logisticButton) then
 
 	end
+	]]
+
+	if isPump and IsConnectedToCircuitNetwork(entity) then
+		elements.setFilterBox.visible = true
+		elements.setFilterBox.state = global.pumps[entity.unit_number][2]
+		elements.chooseButton.locked = elements.setFilterBox.state
+	else
+		elements.chooseButton.locked = false
+		elements.setFilterBox.visible = false
+	end
 
 	player.opened = entityFrame
+end
+
+function FillFilterButton(chooseButton, entity)
+	local filter = nil
+	if global.wagons[entity.unit_number] then
+		filter = global.wagons[entity.unit_number][2]
+	elseif global.pumps[entity.unit_number] and global.pumps[entity.unit_number][1] then
+		local f = global.pumps[entity.unit_number][1].fluidbox.get_filter(1)
+		if f then
+			filter = f.name
+		end
+	end
+	chooseButton.elem_value = filter
 end
 
 function CreateEntityWindow(player, elements)
@@ -155,7 +174,8 @@ function CreateEntityWindow(player, elements)
 	titleFlow.style.horizontal_spacing = 8
 	elements.title = titleFlow.add{type='label', ignored_by_interaction=true, style='frame_title', name='title'}
 	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler_style'}
-	
+
+	--[[
 	elements.circuitButton = titleFlow.add{
 		type='sprite-button',
 		name=CIRCUIT_BUTTON_NAME,
@@ -177,6 +197,7 @@ function CreateEntityWindow(player, elements)
 		clicked_sprite='utility/logistic_network_panel_black',
 		auto_toggle=true
 	}
+	]]
 
 	titleFlow.add{
 		type='sprite-button',
@@ -205,8 +226,9 @@ function CreateEntityWindow(player, elements)
 	columnsFlow.style.top_margin = 4
 
 	local leftColumnFlow = columnsFlow.add{type='flow', direction='vertical', style='left_column'}
-	CreateCircuitConditionBlock(leftColumnFlow, elements)
-	CreateLogisticConditionBlock(leftColumnFlow, elements)
+	--CreateCircuitConditionBlock(leftColumnFlow, elements)
+	--CreateLogisticConditionBlock(leftColumnFlow, elements)
+	elements.setFilterBox = leftColumnFlow.add{type='checkbox', name=SET_FILTER_CHECKBOX_NAME, caption='Set filter from circuit network', state=false}
 
 	local filterFlow = columnsFlow.add{type='flow', direction='vertical', style='right_column'}
 	filterFlow.add{type='label', caption='Filter:', style='bold_label'}
@@ -427,6 +449,17 @@ function CloseEntityWindow(element)
 	end
 end
 
+function OnApplyCircuitFilterChanged(playerIndex, entity)
+	local player = game.get_player(playerIndex)
+	if player ~= nil then
+		local entityFrame = player.gui.screen[ENTITY_FRAME_NAME]
+		local chooseButton = FindElementByName(entityFrame, CHOOSE_FILTER_BUTTON_NAME)
+		FillFilterButton(chooseButton, entity)
+		local checkbox = FindElementByName(entityFrame, SET_FILTER_CHECKBOX_NAME)
+		chooseButton.locked = checkbox.state
+	end
+end
+
 function SetFilter(playerIndex, fluid)
 	if g_SelectedEntity.type == 'pump' then
 		if fluid == nil then
@@ -449,6 +482,19 @@ function SetFilter(playerIndex, fluid)
 	end
 end
 
+function SetApplyCircuitFilter(playerIndex, set)
+	if g_SelectedEntity.type ~= 'pump' then
+		return
+	end
+
+	global.pumps[g_SelectedEntity.unit_number][2] = set
+
+	local player = game.get_player(playerIndex)
+	if player ~= nil then
+		player.print('Entity ' .. g_SelectedEntity.unit_number .. (set and ' will' or 'will not') .. ' get its filter from circuit network')
+	end
+end
+
 
 script.on_event(defines.events.on_gui_opened, OnGuiOpened)
 script.on_event('open_gui', function(event)
@@ -465,6 +511,14 @@ end)
 script.on_event(defines.events.on_gui_elem_changed, function(event)
 	if g_SelectedEntity ~= nil and event.element.name == CHOOSE_FILTER_BUTTON_NAME then
 		SetFilter(event.player_index, event.element.elem_value)
+	end
+end)
+
+script.on_event(defines.events.on_gui_checked_state_changed, function(event)
+	if g_SelectedEntity ~= nil and event.element.name == SET_FILTER_CHECKBOX_NAME then
+		SetApplyCircuitFilter(event.player_index, event.element.state)
+		UpdateCircuit(g_SelectedEntity, event.element.state)
+		OnApplyCircuitFilterChanged(event.player_index, g_SelectedEntity)
 	end
 end)
 

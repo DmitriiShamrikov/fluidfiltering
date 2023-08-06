@@ -2,15 +2,18 @@ require('debug')
 require('ui')
 
 -- Unfortunately pumping from a fluid wagon doesn't seem working through fluidboxes
--- therefore fluidbox filter on a pump doesn't work in this case. As a workaround
--- I run through all pumps and disable them if there is a fluid wagon with a wrong fluid in front of them
--- Can I check that not every frame?
+-- therefore fluidbox filter on a pump doesn't stop a pump to pump a wrong fluid from a wagon
+-- As a workaround I run through all pumps and disable them if there is a fluid wagon
+-- with a wrong fluid in front of them
+-- Apart from that pumps have LuaGenericOnOffControlBehavior (which can't be changed)
+-- that doesn't support filters like LuaInserterControlBehavior, so again, I have to manually
+-- check every frame if a signal has changed and set corresponsing filter
 local PUMP_WAGON_CHECK_PERIOD = 1
 
 local g_SelectedEntity = nil
 local g_PumpConnectionsCache = {}
 
--- global.pumps - array of entities
+-- global.pumps - array of entries, each entry is a pair of entity and a bool signifying if the pump should set the filter from circuit network
 -- global.wagons - array of entries, each entry is a pair of entity and a filter (string)
 
 function QueryEntities(filter, fn)
@@ -33,7 +36,7 @@ function QueryEntities(filter, fn)
 end
 
 function PopulatePumps()
-	global.pumps = QueryEntities{type='pump'}
+	global.pumps = QueryEntities({type='pump'}, function(entity) return {entity, false} end)
 end
 
 function InitGlobal()
@@ -62,7 +65,7 @@ function OnEntityBuilt(event)
 end
 
 function RegisterPump(entity)
-	global.pumps[entity.unit_number] = entity
+	global.pumps[entity.unit_number] = {entity, false}
 	script.register_on_entity_destroyed(entity)
 end
 
@@ -76,10 +79,10 @@ function OnSettingsPasted(event)
 	if event.source.type == 'pump' and event.destination.name == 'filter-pump' then
 		-- that shouldn't noramlly happen, just being extra careful
 		if global.pumps[event.source.unit_number] == nil then
-			global.pumps[event.source.unit_number] = event.source
+			global.pumps[event.source.unit_number] = {event.source, false}
 		end
 		if global.pumps[event.destination.unit_number] == nil then
-			global.pumps[event.destination.unit_number] = event.destination
+			global.pumps[event.destination.unit_number] = {event.destination, false}
 		end
 
 		local filter = event.source.fluidbox.get_filter(1)
@@ -230,16 +233,62 @@ function ShouldEnablePump(pump)
 	return true
 end
 
-function VerifyPumps()
-	for uid, pump in pairs(global.pumps) do
-		if pump == nil or not pump.valid then
+function FindASignal(network)
+	if network and network.signals then
+		for i = 1, #(network.signals) do
+			if network.signals[i].count > 0 and network.signals[i].signal.type == 'fluid' then
+				return network.signals[i].signal.name
+			end
+		end
+	end
+	return nil
+end
+
+function GetFilterFromCircuitNetwork(pump)
+	local network = pump.get_circuit_network(defines.wire_type.red, defines.circuit_connector_id.pump)
+	local signal = FindASignal(network)
+	if signal ~= nil then
+		return signal
+	end
+
+	network = pump.get_circuit_network(defines.wire_type.green, defines.circuit_connector_id.pump)
+	signal = FindASignal(network)
+	return signal
+end
+
+function UpdateCircuit(pump, circuitFilterEnabled)
+	local fb = pump.fluidbox
+	if circuitFilterEnabled then
+		local newFilter = GetFilterFromCircuitNetwork(pump)
+		local filter = fb.get_filter(1)
+		if newFilter == nil and filter ~= nil then
+			fb.set_filter(1, nil)
+		elseif newFilter ~= nil and (filter == nil or filter.name ~= newFilter) then
+			fb.set_filter(1, {name=newFilter, force=true})
+		end
+	else
+		if fb.get_filter(1) ~= nil then
+			fb.set_filter(1, nil)
+		end
+	end
+end
+
+function UpdateState(pump)
+	local enable = ShouldEnablePump(pump)
+	if enable ~= pump.active then
+		pump.active = enable
+		game.print((enable and 'Enabling' or 'Disabling') .. ' pump ' .. uid)
+	end
+end
+
+function UpdatePumps()
+	for uid, entry in pairs(global.pumps) do
+		if entry == nil or entry[1] == nil or not entry[1].valid then
 			global.pumps[uid] = nil
 		else
-			local enable = ShouldEnablePump(pump)
-			if enable ~= pump.active then
-				pump.active = enable
-				game.print((enable and 'Enabling' or 'Disabling') .. ' pump ' .. uid)
-			end
+			local pump = entry[1]
+			UpdateCircuit(pump, entry[2])
+			UpdateState(pump)
 		end
 	end
 end
@@ -247,7 +296,7 @@ end
 script.on_init(InitGlobal)
 script.on_configuration_changed(InitGlobal)
 
-script.on_nth_tick(PUMP_WAGON_CHECK_PERIOD, VerifyPumps)
+script.on_nth_tick(PUMP_WAGON_CHECK_PERIOD, UpdatePumps)
 
 local entityFilters = {{filter='type', type='pump'}}
 script.on_event(defines.events.on_built_entity, OnEntityBuilt, entityFilters)

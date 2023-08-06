@@ -11,9 +11,10 @@ end
 
 function PrintPumps()
 	game.player.print('=== Registered pumps ===')
-	for uid, pump in pairs(global.pumps) do
+	for uid, entry in pairs(global.pumps) do
+		local pump = entry[1]
 		local filter = pump.fluidbox.get_filter(1)
-		game.player.print('Pump ' .. uid .. ': ' .. (pump.active and 'enabled' or 'disabled') .. (filter and (' [' .. filter.name .. ']') or ''))
+		game.player.print('Pump ' .. uid .. ': ' .. (pump.active and 'enabled' or 'disabled') .. (filter and (' [' .. filter.name .. ']') or '') .. (entry[2] and '[circuit]' or ''))
 	end
 	game.player.print('========== END =========')
 end
@@ -28,7 +29,7 @@ function PrintWagons()
 end
 
 function RepopulatePumps()
-	global.pumps = QueryEntities{type='pump'}
+	global.pumps = QueryEntities({type='pump'}, function(entity) return {entity, false} end)
 end
 
 commands.add_command('ff.reset', nil, Clear)
