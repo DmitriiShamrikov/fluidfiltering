@@ -1,9 +1,13 @@
 local ENTITY_FRAME_NAME = 'ui-entity'
 local FILTER_FRAME_NAME = 'ui-liquid-filter'
-local CHOOSE_BUTTON_NAME = 'ui-liquid-filter-chooser'
 local CLOSE_BUTTON_NAME = 'ui-close'
 local CIRCUIT_BUTTON_NAME = 'ui-circuit'
 local LOGISTIC_BUTTON_NAME = 'ui-logistic'
+local CHOOSE_FILTER_BUTTON_NAME = 'ui-liquid-filter-chooser'
+local CHOOSE_SIGNAL_BUTTON_NAME = 'ui-signal-chooser'
+
+local SIGNAL_FRAME_NAME = 'ui-signal'
+local SEARCH_BUTTON_NAME = 'ui-search'
 
 function IsCircuitNetworkUnlocked(player)
 	return player.force.recipes['red-wire'] ~= nil and player.force.recipes['red-wire'].enabled
@@ -66,147 +70,37 @@ end
 function OpenEntityWindow(player, entity)
 	local isPump = entity.type == 'pump'
 
+	local elements = {}
 	local entityFrame = player.gui.screen[ENTITY_FRAME_NAME]
-	local title = nil
-	local preview = nil
-	local chooseButton = nil
-	local statusSprite = nil
-	local statusText = nil
-	
-	local circuitButton = nil
-	local redNetworkId = nil
-	local greenNetworkId = nil
-
-	local logisticButton = nil
 	if entityFrame == nil then
-		entityFrame = player.gui.screen.add{type='frame', name=ENTITY_FRAME_NAME}
-		entityFrame.auto_center = true
-
-		local mainFlow = entityFrame.add{type='flow', direction='vertical'}
-
-		local titleFlow = mainFlow.add{type='flow', direction='horizontal'}
-		titleFlow.drag_target = entityFrame
-		titleFlow.style.horizontal_spacing = 12
-		title = titleFlow.add{type='label', ignored_by_interaction=true, style='frame_title', name='title'}
-		titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler_style'}
-		if isPump and (IsCircuitNetworkUnlocked(player) or IsConnectedToCircuitNetwork(entity)) then
-			circuitButton = titleFlow.add{
-				type='sprite-button',
-				name=CIRCUIT_BUTTON_NAME,
-				style='frame_action_button',
-				tooltip={'gui-control-behavior.circuit-network'},
-				sprite='utility/circuit_network_panel_white',
-				hovered_sprite='utility/circuit_network_panel_black',
-				clicked_sprite='utility/circuit_network_panel_black',
-				auto_toggle=true
-			}
-			circuitButton.style.right_margin = -4
-		end
-		if isPump and IsLogisticNetworkUnlocked(player) then
-			logisticButton = titleFlow.add{
-				type='sprite-button',
-				name=LOGISTIC_BUTTON_NAME,
-				style='frame_action_button',
-				tooltip={'gui-control-behavior.logistic-network'},
-				sprite='utility/logistic_network_panel_white',
-				hovered_sprite='utility/logistic_network_panel_black',
-				clicked_sprite='utility/logistic_network_panel_black',
-				auto_toggle=true
-			}
-			logisticButton.style.right_margin = -4
-		end
-
-		titleFlow.add{
-			type='sprite-button',
-			name=CLOSE_BUTTON_NAME,
-			style='close_button',
-			sprite='utility/close_white',
-			hovered_sprite='utility/close_black',
-			clicked_sprite='utility/close_black',
-		}
-
-		local contentFrame = mainFlow.add{type='frame', style='inside_shallow_frame_with_padding'}
-		local contentFlow = contentFrame.add{type='flow', direction='vertical'}
-
-		local statusFlow = contentFlow.add{type='flow', direction='horizontal'}
-		statusFlow.style.vertical_align = 'center'
-		statusFlow.style.top_margin = -4
-		statusFlow.style.bottom_margin = 4
-		statusSprite = statusFlow.add{type='sprite', name='statusSprite'}
-		statusText = statusFlow.add{type='label', name='statusText'}
-
-		local previewContainer = contentFlow.add{type='frame', style='slot_container_frame'}
-		previewContainer.style.bottom_margin = 4
-		preview = previewContainer.add{type='entity-preview', style='wide_entity_button', name='preview'}
-
-		local columnsFlow = contentFlow.add{type='flow', direction='horizontal'}
-		columnsFlow.style.top_margin = 4
-
-		local leftColumnFlow = columnsFlow.add{type='flow', direction='vertical', style='left_column'}
-		
-		local circuitFlow = leftColumnFlow.add{type='flow', direction='vertical', name='circuitFlow'}
-		local connectionFlow = circuitFlow.add{type='flow', direction='vertical', name='connectionFlow'}
-		connectionFlow.add{type='label', caption={'gui-control-behavior.not-connected'}}
-
-		local circuitInnerFlow = circuitFlow.add{type='flow', direction='vertical', name='circuitInnerFlow'}
-		redNetworkId = circuitInnerFlow.add{type='label', name='redNetworkId'}
-		greenNetworkId = circuitInnerFlow.add{type='label', name='greenNetworkId'}
-		circuitInnerFlow.add{type='line', direction='horizontal'}
-		circuitInnerFlow.add{type='label', caption={'gui-control-behavior.mode-of-operation'}, style='caption_label'}
-		circuitInnerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.none'}, tooltip={'gui-control-behavior-modes.none-write-description'}, state=true}
-		circuitInnerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.enable-disable'}, tooltip={'gui-control-behavior-modes.enable-disable-description'}, state=false}
-		circuitInnerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.set-filters'}, tooltip={'gui-control-behavior-modes.set-filters-description'}, state=false}
-		circuitInnerFlow.add{type='checkbox', caption={'gui-control-behavior-modes.read-contents'}, tooltip={'gui-control-behavior-modes.read-contents-description'}, state=false}
-		
-		local conditionFlow = circuitInnerFlow.add{type='flow', direction='vertical', name='conditionFlow'}
-		conditionFlow.add{type='line', direction='horizontal'}
-		conditionFlow.add{type='label', caption={'gui-control-behavior-modes-guis.enabled-condition'}, style='caption_label'}
-		local conditionSelectorFlow = conditionFlow.add{type='flow', direction='horizontal'}
-		conditionSelectorFlow.style.vertical_align = 'center'
-		conditionSelectorFlow.add{type='choose-elem-button', elem_type='signal'}
-		conditionSelectorFlow.add{type='drop-down', items={'>', '<', '=', '≥', '≤', '≠'}, selected_index=2, style='circuit_condition_comparator_dropdown'}
-		conditionSelectorFlow.add{type='choose-elem-button', elem_type='signal'} -- FUCK
-
-
-		local logisticFlow = leftColumnFlow.add{type='flow', direction='vertical', name='logisticFlow'}
-		connectionFlow = logisticFlow.add{type='flow', direction='vertical', name='connectionFlow'}
-		connectionFlow.add{type='label', caption={'gui-control-behavior.not-connected'}}
-		connectionFlow.add{type='checkbox', caption={'gui-control-behavior.connect'}, state=false}
-
-		local filterFlow = columnsFlow.add{type='flow', direction='vertical', style='right_column'}
-		filterFlow.add{type='label', caption='Filter:', style='bold_label'}
-		chooseButton = filterFlow.add{type='choose-elem-button', name=CHOOSE_BUTTON_NAME, elem_type='fluid'}
+		entityFrame = CreateEntityWindow(player, elements)
 	else
-		title = FindElementByName(entityFrame, 'title')
-		circuitButton = FindElementByName(entityFrame, CIRCUIT_BUTTON_NAME)
-		logisticButton = FindElementByName(entityFrame, LOGISTIC_BUTTON_NAME)
-		statusSprite = FindElementByName(entityFrame, 'statusSprite')
-		statusText = FindElementByName(entityFrame, 'statusText')
-		preview = FindElementByName(entityFrame, 'preview')
-		chooseButton = FindElementByName(entityFrame, CHOOSE_BUTTON_NAME)
-		redNetworkId = FindElementByName(entityFrame, 'redNetworkId')
-		greenNetworkId = FindElementByName(entityFrame, 'greenNetworkId')
+		elements.title = FindElementByName(entityFrame, 'title')
+		elements.circuitButton = FindElementByName(entityFrame, CIRCUIT_BUTTON_NAME)
+		elements.logisticButton = FindElementByName(entityFrame, LOGISTIC_BUTTON_NAME)
+		elements.statusSprite = FindElementByName(entityFrame, 'statusSprite')
+		elements.statusText = FindElementByName(entityFrame, 'statusText')
+		elements.preview = FindElementByName(entityFrame, 'preview')
+		elements.chooseButton = FindElementByName(entityFrame, CHOOSE_FILTER_BUTTON_NAME)
+		elements.redNetworkId = FindElementByName(entityFrame, 'redNetworkId')
+		elements.greenNetworkId = FindElementByName(entityFrame, 'greenNetworkId')
 	end
 
-	title.caption = entity.localised_name
-	preview.entity = entity
+	elements.title.caption = entity.localised_name
+	elements.preview.entity = entity
 
-	if circuitButton then
-		circuitButton.visible = isPump
-		circuitButton.toggled = isPump and IsConnectedToCircuitNetwork(entity)
-	end
+	elements.circuitButton.visible = isPump and (IsCircuitNetworkUnlocked(player) or IsConnectedToCircuitNetwork(entity))
+	elements.circuitButton.toggled = isPump and IsConnectedToCircuitNetwork(entity)
 
-	if logisticButton then
-		logisticButton.visible = isPump
-		logisticButton.toggled = isPump and (not circuitButton or not circuitButton.toggled) and IsConnectedToLogisticNetwork(entity)
-	end
+	elements.logisticButton.visible = isPump
+	elements.logisticButton.toggled = isPump and not elements.circuitButton.toggled and IsConnectedToLogisticNetwork(entity)
 
 	if entity.status == defines.entity_status.normal or entity.status == defines.entity_status.working or entity.status == nil then
-		statusSprite.sprite = 'utility/status_working'
+		elements.statusSprite.sprite = 'utility/status_working'
 	elseif entity.status == defines.entity_status.low_power then
-		statusSprite.sprite = 'utility/status_yellow'
+		elements.statusSprite.sprite = 'utility/status_yellow'
 	else
-		statusSprite.sprite = 'utility/status_not_working'
+		elements.statusSprite.sprite = 'utility/status_not_working'
 	end
 
 	local statusName = nil
@@ -216,7 +110,7 @@ function OpenEntityWindow(player, entity)
 			break
 		end
 	end
-	statusText.caption = {'entity-status.' .. (statusName and statusName:gsub('_', '-') or 'normal')}
+	elements.statusText.caption = {'entity-status.' .. (statusName and statusName:gsub('_', '-') or 'normal')}
 
 	local filter = nil
 	if global.wagons[entity.unit_number] then
@@ -227,27 +121,178 @@ function OpenEntityWindow(player, entity)
 			filter = f.name
 		end
 	end
-	chooseButton.elem_value = filter
+	elements.chooseButton.elem_value = filter
 
-	if ToggleCircuitNetworkBlock(player, entity, circuitButton) then
+	if ToggleCircuitNetworkBlock(player, entity, elements.circuitButton) then
 		local redNetwork = entity.get_circuit_network(defines.wire_type.red)
 		local greenNetwork = entity.get_circuit_network(defines.wire_type.green)
-		redNetworkId.visible = redNetwork ~= nil
-		greenNetworkId.visible = greenNetwork ~= nil
+		elements.redNetworkId.visible = redNetwork ~= nil
+		elements.greenNetworkId.visible = greenNetwork ~= nil
 		
 		if redNetwork then
-			redNetworkId.caption = {'', {'gui-control-behavior.connected-to-network'}, ': ', {'gui-control-behavior.red-network-id', redNetwork.network_id}}
-			redNetworkId.tooltip = {'', {'gui-control-behavior.circuit-network'}, ': ', redNetwork.network_id}
+			elements.redNetworkId.caption = {'', {'gui-control-behavior.connected-to-network'}, ': ', {'gui-control-behavior.red-network-id', redNetwork.network_id}}
+			elements.redNetworkId.tooltip = {'', {'gui-control-behavior.circuit-network'}, ': ', redNetwork.network_id}
 		end
 		if greenNetwork then
-			greenNetworkId.caption = {'',{'gui-control-behavior.connected-to-network'}, ': ', {'gui-control-behavior.green-network-id', greenNetwork.network_id}}
-			greenNetworkId.tooltip = {'', {'gui-control-behavior.circuit-network'}, ': ', greenNetwork.network_id}
+			elements.greenNetworkId.caption = {'',{'gui-control-behavior.connected-to-network'}, ': ', {'gui-control-behavior.green-network-id', greenNetwork.network_id}}
+			elements.greenNetworkId.tooltip = {'', {'gui-control-behavior.circuit-network'}, ': ', greenNetwork.network_id}
 		end
-	elseif ToggleLogisticNetworkBlock(player, entity, logisticButton) then
+	elseif ToggleLogisticNetworkBlock(player, entity, elements.logisticButton) then
 
 	end
 
 	player.opened = entityFrame
+end
+
+function CreateEntityWindow(player, elements)
+	local entityFrame = player.gui.screen.add{type='frame', name=ENTITY_FRAME_NAME}
+	entityFrame.auto_center = true
+
+	local mainFlow = entityFrame.add{type='flow', direction='vertical'}
+
+	local titleFlow = mainFlow.add{type='flow', direction='horizontal'}
+	titleFlow.drag_target = entityFrame
+	titleFlow.style.horizontal_spacing = 8
+	elements.title = titleFlow.add{type='label', ignored_by_interaction=true, style='frame_title', name='title'}
+	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler_style'}
+	
+	elements.circuitButton = titleFlow.add{
+		type='sprite-button',
+		name=CIRCUIT_BUTTON_NAME,
+		style='frame_action_button',
+		tooltip={'gui-control-behavior.circuit-network'},
+		sprite='utility/circuit_network_panel_white',
+		hovered_sprite='utility/circuit_network_panel_black',
+		clicked_sprite='utility/circuit_network_panel_black',
+		auto_toggle=true
+	}
+
+	elements.logisticButton = titleFlow.add{
+		type='sprite-button',
+		name=LOGISTIC_BUTTON_NAME,
+		style='frame_action_button',
+		tooltip={'gui-control-behavior.logistic-network'},
+		sprite='utility/logistic_network_panel_white',
+		hovered_sprite='utility/logistic_network_panel_black',
+		clicked_sprite='utility/logistic_network_panel_black',
+		auto_toggle=true
+	}
+
+	titleFlow.add{
+		type='sprite-button',
+		name=CLOSE_BUTTON_NAME,
+		style='close_button',
+		sprite='utility/close_white',
+		hovered_sprite='utility/close_black',
+		clicked_sprite='utility/close_black',
+	}
+
+	local contentFrame = mainFlow.add{type='frame', style='inside_shallow_frame_with_padding'}
+	local contentFlow = contentFrame.add{type='flow', direction='vertical'}
+
+	local statusFlow = contentFlow.add{type='flow', direction='horizontal'}
+	statusFlow.style.vertical_align = 'center'
+	statusFlow.style.top_margin = -4
+	statusFlow.style.bottom_margin = 4
+	elements.statusSprite = statusFlow.add{type='sprite', name='statusSprite'}
+	elements.statusText = statusFlow.add{type='label', name='statusText'}
+
+	local previewContainer = contentFlow.add{type='frame', style='slot_container_frame'}
+	previewContainer.style.bottom_margin = 4
+	elements.preview = previewContainer.add{type='entity-preview', style='wide_entity_button', name='preview'}
+
+	local columnsFlow = contentFlow.add{type='flow', direction='horizontal'}
+	columnsFlow.style.top_margin = 4
+
+	local leftColumnFlow = columnsFlow.add{type='flow', direction='vertical', style='left_column'}
+	CreateCircuitConditionBlock(leftColumnFlow, elements)
+	CreateLogisticConditionBlock(leftColumnFlow, elements)
+
+	local filterFlow = columnsFlow.add{type='flow', direction='vertical', style='right_column'}
+	filterFlow.add{type='label', caption='Filter:', style='bold_label'}
+	elements.chooseButton = filterFlow.add{type='choose-elem-button', name=CHOOSE_FILTER_BUTTON_NAME, elem_type='fluid'}
+
+	return entityFrame
+end
+
+function CreateCircuitConditionBlock(root, elements)
+	local circuitFlow = root.add{type='flow', direction='vertical', name='circuitFlow'}
+	local connectionFlow = circuitFlow.add{type='flow', direction='vertical', name='connectionFlow'}
+	connectionFlow.add{type='label', caption={'gui-control-behavior.not-connected'}}
+
+	local circuitInnerFlow = circuitFlow.add{type='flow', direction='vertical', name='circuitInnerFlow'}
+	elements.redNetworkId = circuitInnerFlow.add{type='label', name='redNetworkId'}
+	elements.greenNetworkId = circuitInnerFlow.add{type='label', name='greenNetworkId'}
+	circuitInnerFlow.add{type='line', direction='horizontal'}
+	circuitInnerFlow.add{type='label', caption={'gui-control-behavior.mode-of-operation'}, style='caption_label'}
+	circuitInnerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.none'}, tooltip={'gui-control-behavior-modes.none-write-description'}, state=true}
+	circuitInnerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.enable-disable'}, tooltip={'gui-control-behavior-modes.enable-disable-description'}, state=false}
+	circuitInnerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.set-filters'}, tooltip={'gui-control-behavior-modes.set-filters-description'}, state=false}
+	circuitInnerFlow.add{type='checkbox', caption={'gui-control-behavior-modes.read-contents'}, tooltip={'gui-control-behavior-modes.read-contents-description'}, state=false}
+	
+	local conditionFlow = circuitInnerFlow.add{type='flow', direction='vertical', name='conditionFlow'}
+	conditionFlow.add{type='line', direction='horizontal'}
+	conditionFlow.add{type='label', caption={'gui-control-behavior-modes-guis.enabled-condition'}, style='caption_label'}
+	local conditionSelectorFlow = conditionFlow.add{type='flow', direction='horizontal'}
+	conditionSelectorFlow.style.vertical_align = 'center'
+	conditionSelectorFlow.add{type='choose-elem-button', elem_type='signal'}
+	conditionSelectorFlow.add{type='drop-down', items={'>', '<', '=', '≥', '≤', '≠'}, selected_index=2, style='circuit_condition_comparator_dropdown'}
+	local rightChooser = conditionSelectorFlow.add{type='choose-elem-button', elem_type='signal', name=CHOOSE_SIGNAL_BUTTON_NAME}
+	rightChooser.locked = true
+
+	rightChooser.elem_value = {type='item', name='iron-plate'}
+end
+
+function CreateLogisticConditionBlock(root, elements)
+	local logisticFlow = root.add{type='flow', direction='vertical', name='logisticFlow'}
+	connectionFlow = logisticFlow.add{type='flow', direction='vertical', name='connectionFlow'}
+	connectionFlow.add{type='label', caption={'gui-control-behavior.not-connected'}}
+	connectionFlow.add{type='checkbox', caption={'gui-control-behavior.connect'}, state=false}
+end
+
+function OpenSignalChooseWindow(player)
+	-- okay, it looks like we will fail to mimic original UI completely and it would be noticable and ugly
+	-- plus I personally don't think the original UI is the best UI
+	-- so: copy the idea, have our reasonable implementation
+
+	local elements = {}
+	local signalFrame = player.gui.screen[SIGNAL_FRAME_NAME]
+	if signalFrame == nil then
+		CreateSignalChooseWindow(player, elements)
+	else
+
+	end
+end
+
+function CreateSignalChooseWindow(player, elements)
+	local signalFrame = player.gui.screen.add{type='frame', name=SIGNAL_FRAME_NAME}
+	signalFrame.auto_center = true
+
+	local titleFlow = signalFrame.add{type='flow', direction='horizontal'}
+	titleFlow.drag_target = signalFrame
+	titleFlow.style.horizontal_spacing = 8
+	titleFlow.add{type='label', caption={'gui.select-signal'}, ignored_by_interaction=true, style='frame_title'}
+	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler_style'}
+	
+	titleFlow.add{
+		type='sprite-button',
+		name=SEARCH_BUTTON_NAME,
+		style='frame_action_button',
+		tooltip={'gui.search-with-focus', '__CONTROL__focus-search__'},
+		sprite='utility/search_white',
+		hovered_sprite='utility/search_black',
+		clicked_sprite='utility/search_black',
+		auto_toggle=true
+	}
+
+	titleFlow.add{
+		type='sprite-button',
+		name=CLOSE_BUTTON_NAME,
+		style='close_button',
+		sprite='utility/close_white',
+		hovered_sprite='utility/close_black',
+		clicked_sprite='utility/close_black',
+	}
 end
 
 function OpenFluidFilterPanel(player, entity)
@@ -280,7 +325,7 @@ function OpenFluidFilterPanel(player, entity)
 		}
 		panelFrame = player.gui.relative.add{type='frame', name=frameName, caption='Filter', anchor=anchor}
 		local contentFrame = panelFrame.add{type='frame', style='inside_shallow_frame_with_padding'}
-		chooseButton = contentFrame.add{type='choose-elem-button', name=CHOOSE_BUTTON_NAME, elem_type='fluid'}
+		chooseButton = contentFrame.add{type='choose-elem-button', name=CHOOSE_FILTER_BUTTON_NAME, elem_type='fluid'}
 	else
 		chooseButton = panelFrame.children[1].children[1]
 	end
@@ -418,7 +463,7 @@ script.on_event('open_gui', function(event)
 end)
 
 script.on_event(defines.events.on_gui_elem_changed, function(event)
-	if g_SelectedEntity ~= nil and event.element.name == CHOOSE_BUTTON_NAME then
+	if g_SelectedEntity ~= nil and event.element.name == CHOOSE_FILTER_BUTTON_NAME then
 		SetFilter(event.player_index, event.element.elem_value)
 	end
 end)
@@ -439,6 +484,16 @@ script.on_event(defines.events.on_gui_click, function(event)
 			return
 		end
 		ToggleLogisticNetworkBlock(player, g_SelectedEntity, event.element)
+	elseif event.element.name == CHOOSE_SIGNAL_BUTTON_NAME then
+		local player = game.get_player(event.player_index)
+		if player == nil then
+			return
+		end
+		if event.button == defines.mouse_button_type.right then
+			event.element.elem_value = nil
+		else
+			CreateSignalChooseWindow(player)
+		end
 	end
 end)
 
