@@ -5,7 +5,6 @@ local CIRCUIT_BUTTON_NAME = 'ui-circuit'
 local LOGISTIC_BUTTON_NAME = 'ui-logistic'
 local CHOOSE_FILTER_BUTTON_NAME = 'ui-liquid-filter-chooser'
 local CHOOSE_SIGNAL_BUTTON_NAME = 'ui-signal-chooser'
-local SET_FILTER_CHECKBOX_NAME = 'ui-circuit-filter-checkbox'
 
 local SIGNAL_FRAME_NAME = 'ui-signal'
 local SEARCH_BUTTON_NAME = 'ui-search'
@@ -68,6 +67,44 @@ function OnGuiOpened(event)
 	end
 end
 
+function OpenFluidFilterPanel(player, entity)
+	local guiType = nil
+	local filterFluid = nil
+	if entity.type == 'pump' then
+		local filter = entity.fluidbox.get_filter(1)
+		filterFluid = filter and filter.name or nil
+		guiType = defines.relative_gui_type.entity_with_energy_source_gui
+	elseif entity.type == 'fluid-wagon' then
+		local filter = global.wagons[entity.unit_number]
+		filterFluid = filter and filter[2] or nil
+		if entity.prototype.grid_prototype ~= nil then
+			guiType = defines.relative_gui_type.equipment_grid_gui
+		else
+			guiType = defines.relative_gui_type.additional_entity_info_gui -- for editor only
+		end
+	else
+		return
+	end
+
+	local frameName = FILTER_FRAME_NAME .. '-' .. guiType
+	local panelFrame = player.gui.relative[frameName]
+	local chooseButton = nil
+	if panelFrame == nil then
+		local anchor = {
+			gui = guiType,
+			position = defines.relative_gui_position.bottom,
+			names = {'filter-pump', 'filter-fluid-wagon'}
+		}
+		panelFrame = player.gui.relative.add{type='frame', name=frameName, caption='Filter', anchor=anchor}
+		local contentFrame = panelFrame.add{type='frame', style='inside_shallow_frame_with_padding'}
+		chooseButton = contentFrame.add{type='choose-elem-button', name=CHOOSE_FILTER_BUTTON_NAME, elem_type='fluid'}
+	else
+		chooseButton = panelFrame.children[1].children[1]
+	end
+
+	chooseButton.elem_value = filterFluid
+end
+
 function OpenEntityWindow(player, entity)
 	local isPump = entity.type == 'pump'
 
@@ -85,7 +122,6 @@ function OpenEntityWindow(player, entity)
 		elements.chooseButton = FindElementByName(entityFrame, CHOOSE_FILTER_BUTTON_NAME)
 		elements.redNetworkId = FindElementByName(entityFrame, 'redNetworkId')
 		elements.greenNetworkId = FindElementByName(entityFrame, 'greenNetworkId')
-		elements.setFilterBox = FindElementByName(entityFrame, SET_FILTER_CHECKBOX_NAME)
 	end
 
 	elements.title.caption = entity.localised_name
@@ -139,12 +175,9 @@ function OpenEntityWindow(player, entity)
 	]]
 
 	if isPump and IsConnectedToCircuitNetwork(entity) then
-		elements.setFilterBox.visible = true
-		elements.setFilterBox.state = global.pumps[entity.unit_number][2]
-		elements.chooseButton.locked = elements.setFilterBox.state
+		elements.chooseButton.locked = false
 	else
 		elements.chooseButton.locked = false
-		elements.setFilterBox.visible = false
 	end
 
 	player.opened = entityFrame
@@ -228,7 +261,6 @@ function CreateEntityWindow(player, elements)
 	local leftColumnFlow = columnsFlow.add{type='flow', direction='vertical', style='left_column'}
 	--CreateCircuitConditionBlock(leftColumnFlow, elements)
 	--CreateLogisticConditionBlock(leftColumnFlow, elements)
-	elements.setFilterBox = leftColumnFlow.add{type='checkbox', name=SET_FILTER_CHECKBOX_NAME, caption='Set filter from circuit network', state=false}
 
 	local filterFlow = columnsFlow.add{type='flow', direction='vertical', style='right_column'}
 	filterFlow.add{type='label', caption='Filter:', style='bold_label'}
@@ -315,44 +347,6 @@ function CreateSignalChooseWindow(player, elements)
 		hovered_sprite='utility/close_black',
 		clicked_sprite='utility/close_black',
 	}
-end
-
-function OpenFluidFilterPanel(player, entity)
-	local guiType = nil
-	local filterFluid = nil
-	if entity.type == 'pump' then
-		local filter = entity.fluidbox.get_filter(1)
-		filterFluid = filter and filter.name or nil
-		guiType = defines.relative_gui_type.entity_with_energy_source_gui
-	elseif entity.type == 'fluid-wagon' then
-		local filter = global.wagons[entity.unit_number]
-		filterFluid = filter and filter[2] or nil
-		if entity.prototype.grid_prototype ~= nil then
-			guiType = defines.relative_gui_type.equipment_grid_gui
-		else
-			guiType = defines.relative_gui_type.additional_entity_info_gui -- for editor only
-		end
-	else
-		return
-	end
-
-	local frameName = FILTER_FRAME_NAME .. '-' .. guiType
-	local panelFrame = player.gui.relative[frameName]
-	local chooseButton = nil
-	if panelFrame == nil then
-		local anchor = {
-			gui = guiType,
-			position = defines.relative_gui_position.bottom,
-			names = {'filter-pump', 'filter-fluid-wagon'}
-		}
-		panelFrame = player.gui.relative.add{type='frame', name=frameName, caption='Filter', anchor=anchor}
-		local contentFrame = panelFrame.add{type='frame', style='inside_shallow_frame_with_padding'}
-		chooseButton = contentFrame.add{type='choose-elem-button', name=CHOOSE_FILTER_BUTTON_NAME, elem_type='fluid'}
-	else
-		chooseButton = panelFrame.children[1].children[1]
-	end
-
-	chooseButton.elem_value = filterFluid
 end
 
 function ToggleCircuitNetworkBlock(player, entity, circuitButton)
@@ -455,10 +449,10 @@ function OnApplyCircuitFilterChanged(playerIndex, entity)
 		local entityFrame = player.gui.screen[ENTITY_FRAME_NAME]
 		local chooseButton = FindElementByName(entityFrame, CHOOSE_FILTER_BUTTON_NAME)
 		FillFilterButton(chooseButton, entity)
-		local checkbox = FindElementByName(entityFrame, SET_FILTER_CHECKBOX_NAME)
-		chooseButton.locked = checkbox.state
+		-- chooseButton.locked = <true if the 'set filter' is chosen>
 	end
 end
+
 
 function SetFilter(playerIndex, fluid)
 	if g_SelectedEntity.type == 'pump' then
@@ -482,7 +476,7 @@ function SetFilter(playerIndex, fluid)
 	end
 end
 
-function SetApplyCircuitFilter(playerIndex, set)
+function SetFilterControlledByCircuit(playerIndex, set)
 	if g_SelectedEntity.type ~= 'pump' then
 		return
 	end
@@ -511,14 +505,6 @@ end)
 script.on_event(defines.events.on_gui_elem_changed, function(event)
 	if g_SelectedEntity ~= nil and event.element.name == CHOOSE_FILTER_BUTTON_NAME then
 		SetFilter(event.player_index, event.element.elem_value)
-	end
-end)
-
-script.on_event(defines.events.on_gui_checked_state_changed, function(event)
-	if g_SelectedEntity ~= nil and event.element.name == SET_FILTER_CHECKBOX_NAME then
-		SetApplyCircuitFilter(event.player_index, event.element.state)
-		UpdateCircuit(g_SelectedEntity, event.element.state)
-		OnApplyCircuitFilterChanged(event.player_index, g_SelectedEntity)
 	end
 end)
 
