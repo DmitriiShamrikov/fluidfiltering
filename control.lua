@@ -266,10 +266,6 @@ function UpdateCircuit(pump, circuitFilterEnabled)
 		elseif newFilter ~= nil and (filter == nil or filter.name ~= newFilter) then
 			fb.set_filter(1, {name=newFilter, force=true})
 		end
-	else
-		if fb.get_filter(1) ~= nil then
-			fb.set_filter(1, nil)
-		end
 	end
 end
 
@@ -277,7 +273,7 @@ function UpdateState(pump)
 	local enable = ShouldEnablePump(pump)
 	if enable ~= pump.active then
 		pump.active = enable
-		game.print((enable and 'Enabling' or 'Disabling') .. ' pump ' .. uid)
+		game.print((enable and 'Enabling' or 'Disabling') .. ' pump ' .. pump.unit_number)
 	end
 end
 
