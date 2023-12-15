@@ -11,24 +11,6 @@ local LOGISITIC_CONNECT_CHECKBOX_NAME = 'ui-logistic-connect'
 local SIGNAL_FRAME_NAME = 'ui-signal'
 local SEARCH_BUTTON_NAME = 'ui-search'
 
-function IsCircuitNetworkUnlocked(player)
-	return player.force.recipes['red-wire'] ~= nil and player.force.recipes['red-wire'].enabled
-end
-
-function IsLogisticNetworkUnlocked(player)
-	return player.force.recipes['roboport'] ~= nil and player.force.recipes['roboport'].enabled
-end
-
-function IsConnectedToCircuitNetwork(entity)
-	return entity.get_circuit_network(defines.wire_type.red, defines.circuit_connector_id.pump) ~= nil
-		or entity.get_circuit_network(defines.wire_type.green, defines.circuit_connector_id.pump) ~= nil
-end
-
-function IsConnectedToLogisticNetwork(entity)
-	local behavior = entity.get_control_behavior()
-	return behavior and behavior.connect_to_logistic_network
-end
-
 ----------------------------------------
 ----- UI creation and interaction ------
 ----------------------------------------
@@ -127,7 +109,7 @@ function OpenEntityWindow(player, entity)
 
 	elements.circuitButton.visible = isPump and (IsCircuitNetworkUnlocked(player) or IsConnectedToCircuitNetwork(entity))
 	elements.circuitButton.toggled = isPump and IsConnectedToCircuitNetwork(entity)
-
+	
 	elements.logisticButton.visible = isPump
 	elements.logisticButton.toggled = isPump and not elements.circuitButton.toggled and IsConnectedToLogisticNetwork(entity)
 
@@ -148,9 +130,8 @@ function OpenEntityWindow(player, entity)
 	end
 	elements.statusText.caption = {'entity-status.' .. (statusName and statusName:gsub('_', '-') or 'normal')}
 
-	FillFilterButton(elements.chooseButton, entity)
-
-	ToggleCircuitLogisiticBlocksVisibility(player, entity, elements)
+	local disableFilterButton = global.pumps[entity.unit_number] and global.pumps[entity.unit_number][2] == CircuitMode.SetFilter
+	FillFilterButton(elements.chooseButton, entity, disableFilterButton)
 
 	local redNetwork = entity.get_circuit_network(defines.wire_type.red)
 	local greenNetwork = entity.get_circuit_network(defines.wire_type.green)
@@ -168,14 +149,30 @@ function OpenEntityWindow(player, entity)
 		elements.greenNetworkId.tooltip = {'', {'gui-control-behavior.circuit-network'}, ': ', greenNetwork.network_id}
 	end
 
+	if isPump then
+		if global.pumps[entity.unit_number] then
+			elements.circuitMode.noneRadio.state = global.pumps[entity.unit_number][2] == CircuitMode.None
+			elements.circuitMode.enableDisableRadio.state = global.pumps[entity.unit_number][2] == CircuitMode.EnableDisable
+			elements.circuitMode.setFilterRadio.state = global.pumps[entity.unit_number][2] == CircuitMode.SetFilter
+		else
+			elements.circuitMode.noneRadio.state = true
+			elements.circuitMode.enableDisableRadio.state = false
+			elements.circuitMode.setFilterRadio.state = false
+		end
+	end
+
+	-- TODO: fill enabled condition
+
 	FillLogisticBlock(elements, entity)
 
-	elements.chooseButton.locked = isPump and IsConnectedToCircuitNetwork(entity) and elements.circuitSetFilterRadio.state == true
+	-- TODO: fill enabled condition
 
+	ToggleCircuitLogisiticBlocksVisibility(player, entity, elements)
+	
 	player.opened = entityFrame
 end
 
-function FillFilterButton(chooseButton, entity)
+function FillFilterButton(chooseButton, entity, locked)
 	local filter = nil
 	if global.wagons[entity.unit_number] then
 		filter = global.wagons[entity.unit_number][2]
@@ -186,6 +183,7 @@ function FillFilterButton(chooseButton, entity)
 		end
 	end
 	chooseButton.elem_value = filter
+	chooseButton.locked = locked
 end
 
 function FillLogisticBlock(elements, entity)
@@ -207,6 +205,9 @@ function ToggleCircuitLogisiticBlocksVisibility(player, entity, elements)
 	local showCircuitNetwork = elements.circuitButton and elements.circuitButton.toggled
 	local showLogisticNetwork = not showCircuitNetwork and elements.logisticButton and elements.logisticButton.toggled
 
+	elements.circuitButton.sprite = elements.circuitButton.toggled and 'utility/circuit_network_panel_black' or 'utility/circuit_network_panel_white'
+	elements.logisticButton.sprite = elements.logisticButton.toggled and 'utility/logistic_network_panel_black' or 'utility/logistic_network_panel_white'
+
 	if showCircuitNetwork then
 		elements.circuitFlow.visible = true
 		elements.logisticFlow.visible = false
@@ -214,7 +215,7 @@ function ToggleCircuitLogisiticBlocksVisibility(player, entity, elements)
 		if IsConnectedToCircuitNetwork(entity) then
 			elements.circuitConnectionFlow.visible = false
 			elements.circuitInnerFlow.visible = true
-			elements.circuitEnableConditionFlow.visible = elements.circuitEnableDisableRadio.state
+			elements.circuitEnableConditionFlow.visible = elements.circuitMode.enableDisableRadio.state
 		else
 			elements.circuitConnectionFlow.visible = true
 			elements.circuitInnerFlow.visible = false
@@ -249,8 +250,10 @@ function FetchEntityWindowElements(entityFrame)
 	elements.circuitFlow = FindElementByName(entityFrame, 'circuitFlow')
 	elements.circuitConnectionFlow = FindElementByName(entityFrame, 'circuitConnectionFlow')
 	elements.circuitInnerFlow = FindElementByName(entityFrame, 'circuitInnerFlow')
-	elements.circuitEnableDisableRadio = FindElementByName(entityFrame, 'circuitEnableDisableRadio')
-	elements.circuitSetFilterRadio = FindElementByName(entityFrame, 'circuitSetFilterRadio')
+	elements.circuitMode = {}
+	elements.circuitMode.noneRadio = FindElementByName(entityFrame, 'circuitModeNoneRadio')
+	elements.circuitMode.enableDisableRadio = FindElementByName(entityFrame, 'circuitModeEnableDisableRadio')
+	elements.circuitMode.setFilterRadio = FindElementByName(entityFrame, 'circuitModeSetFilterRadio')
 	elements.circuitEnableConditionFlow = FindElementByName(entityFrame, 'circuitEnableConditionFlow')
 
 	elements.logisticFlow = FindElementByName(entityFrame, 'logisticFlow')
@@ -343,16 +346,19 @@ function CreateCircuitConditionBlock(root, elements)
 	elements.greenNetworkId = innerFlow.add{type='label', name='greenNetworkId'}
 	innerFlow.add{type='line', direction='horizontal'}
 	innerFlow.add{type='label', caption={'gui-control-behavior.mode-of-operation'}, style='caption_label'}
-	innerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.none'}, tooltip={'gui-control-behavior-modes.none-write-description'}, state=true}
-	local enDisRadio = innerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.enable-disable'}, tooltip={'gui-control-behavior-modes.enable-disable-description'}, state=false, name='circuitEnableDisableRadio'}
-	local setFilterRadio = innerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.set-filters'}, tooltip={'gui-control-behavior-modes.set-filters-description'}, state=false, name='circuitSetFilterRadio'}
+	local noneRadio = innerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.none'}, tooltip={'gui-control-behavior-modes.none-write-description'}, state=true, name='circuitModeNoneRadio'}
+	local enDisRadio = innerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.enable-disable'}, tooltip={'gui-control-behavior-modes.enable-disable-description'}, state=false, name='circuitModeEnableDisableRadio'}
+	local setFilterRadio = innerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.set-filters'}, tooltip={'gui-control-behavior-modes.set-filters-description'}, state=false, name='circuitModeSetFilterRadio'}
 	--innerFlow.add{type='checkbox', caption={'gui-control-behavior-modes.read-contents'}, tooltip={'gui-control-behavior-modes.read-contents-description'}, state=false}
 	
 	elements.circuitFlow = circuitFlow
 	elements.circuitConnectionFlow = connectionFlow
 	elements.circuitInnerFlow = innerFlow
-	elements.circuitEnableDisableRadio = enDisRadio
-	elements.circuitSetFilterRadio = setFilterRadio
+	elements.circuitMode = {
+		noneRadio = noneRadio,
+		enableDisableRadio = enDisRadio,
+		setFilterRadio = setFilterRadio
+	}
 	CreateEnabledDisabledBlock(circuitFlow, elements, true)
 end
 
@@ -450,16 +456,6 @@ function CloseEntityWindow(element)
 	end
 end
 
-function OnApplyCircuitFilterChanged(playerIndex, entity)
-	local player = game.get_player(playerIndex)
-	if player ~= nil then
-		local entityFrame = player.gui.screen[ENTITY_FRAME_NAME]
-		local chooseButton = FindElementByName(entityFrame, CHOOSE_FILTER_BUTTON_NAME)
-		FillFilterButton(chooseButton, entity)
-		-- chooseButton.locked = <true if the 'set filter' is chosen>
-	end
-end
-
 ---------------------------------------
 ----- Apply changes to the entity -----
 ---------------------------------------
@@ -499,16 +495,20 @@ function ConnectToLogisiticNetwork(playerIndex, connect)
 	end
 end
 
-function SetFilterControlledByCircuit(playerIndex, set)
+function SetCircuitMode(playerIndex, circuitMode)
 	if g_SelectedEntity.type ~= 'pump' then
 		return
 	end
 
-	global.pumps[g_SelectedEntity.unit_number][2] = set
+	if global.pumps[g_SelectedEntity.unit_number][2] == circuitMode then
+		return
+	end
+
+	global.pumps[g_SelectedEntity.unit_number][2] = circuitMode
 
 	local player = game.get_player(playerIndex)
 	if player ~= nil then
-		player.print('Entity ' .. g_SelectedEntity.unit_number .. (set and ' will' or 'will not') .. ' get its filter from circuit network')
+		player.print('Entity ' .. g_SelectedEntity.unit_number .. (circuitMode == CircuitMode.SetFilter and ' will' or ' will not') .. ' get its filter from circuit network')
 	end
 end
 
@@ -519,7 +519,7 @@ end
 script.on_event(defines.events.on_gui_opened, OnGuiOpened)
 script.on_event('open_gui', function(event)
 	local player = game.get_player(event.player_index)
-	if player == nil or player.selected == nil or player.selected == g_SelectedEntity then
+	if player == nil or player.selected == nil or player.selected == g_SelectedEntity or player.cursor_stack then
 		return
 	end
 
@@ -535,44 +535,61 @@ script.on_event(defines.events.on_gui_elem_changed, function(event)
 end)
 
 script.on_event(defines.events.on_gui_click, function(event)
-	if event.element.name == CLOSE_BUTTON_NAME then
-		CloseEntityWindow(event.element)
-		g_SelectedEntity = nil
-	elseif event.element.name == CIRCUIT_BUTTON_NAME or event.element.name == LOGISTIC_BUTTON_NAME then
-		local player = game.get_player(event.player_index)
-		if player == nil then
-			return
-		end
+	local player = game.get_player(event.player_index)
+	if player == nil then
+		return
+	end
 
-		local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
-		if event.element.toggled then
-			if event.element.name == CIRCUIT_BUTTON_NAME then
-				elements.logisticButton.toggled = false
+	if event.element.type == 'sprite-button' then
+		if event.element.name == CLOSE_BUTTON_NAME then
+			CloseEntityWindow(event.element)
+			g_SelectedEntity = nil
+		elseif event.element.name == CIRCUIT_BUTTON_NAME or event.element.name == LOGISTIC_BUTTON_NAME then
+			local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+			if event.element.toggled then
+				if event.element.name == CIRCUIT_BUTTON_NAME then
+					elements.logisticButton.toggled = false
+				else
+					elements.circuitButton.toggled = false
+				end
+			end
+			ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
+		end
+	elseif event.element.type == 'checkbox' then
+		if event.element.name == LOGISITIC_CONNECT_CHECKBOX_NAME then
+			local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+			ConnectToLogisiticNetwork(event.player_index, event.element.state)
+			FillLogisticBlock(elements, g_SelectedEntity)
+			ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
+		end
+	elseif event.element.type == 'choose-elem-button' then
+		if event.element.name == CHOOSE_CIRCUIT_SIGNAL_BUTTON_NAME then
+			if event.button == defines.mouse_button_type.right then
+				event.element.elem_value = nil
 			else
-				elements.circuitButton.toggled = false
+				CreateSignalChooseWindow(player)
 			end
 		end
-		ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
-	elseif event.element.name == LOGISITIC_CONNECT_CHECKBOX_NAME then
-		local player = game.get_player(event.player_index)
-		if player == nil then
-			return
+	elseif event.element.type == 'radiobutton' then
+		local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+		for _, radio in pairs(elements.circuitMode) do
+			if radio ~= event.element then
+				radio.state = false
+			end
 		end
 
-		local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
-		ConnectToLogisiticNetwork(event.player_index, event.element.state)
-		FillLogisticBlock(elements, g_SelectedEntity)
-		ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
-	elseif event.element.name == CHOOSE_SIGNAL_BUTTON_NAME then
-		local player = game.get_player(event.player_index)
-		if player == nil then
-			return
+		local circuitMode = CircuitMode.None
+		if elements.circuitMode.enableDisableRadio.state then
+			circuitMode = CircuitMode.EnableDisable
+		elseif elements.circuitMode.setFilterRadio.state then
+			circuitMode = CircuitMode.SetFilter
 		end
-		if event.button == defines.mouse_button_type.right then
-			event.element.elem_value = nil
-		else
-			CreateSignalChooseWindow(player)
-		end	
+
+		local setFilterFromCircuit = elements.circuitMode.setFilterRadio.state
+		SetCircuitMode(event.player_index, circuitMode)
+		UpdateCircuit(g_SelectedEntity, circuitMode)
+		FillFilterButton(elements.chooseButton, g_SelectedEntity, circuitMode == CircuitMode.SetFilter)
+		ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
 	end
 end)
 
