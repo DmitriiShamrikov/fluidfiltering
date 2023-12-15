@@ -14,7 +14,7 @@ function PrintPumps()
 	for uid, entry in pairs(global.pumps) do
 		local pump = entry[1]
 		local filter = pump.fluidbox.get_filter(1)
-		game.player.print('Pump ' .. uid .. ': ' .. (pump.active and 'enabled' or 'disabled') .. (filter and (' [' .. filter.name .. ']') or '') .. (entry[2] and '[circuit]' or ''))
+		game.player.print('Pump ' .. uid .. ': ' .. (pump.active and 'enabled' or 'disabled') .. (filter and (' [' .. filter.name .. ']') or '') .. (entry[2] == CircuitMode.SetFilter and '[circuit]' or ''))
 	end
 	game.player.print('========== END =========')
 end

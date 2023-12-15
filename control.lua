@@ -13,8 +13,33 @@ local PUMP_WAGON_CHECK_PERIOD = 1
 local g_SelectedEntity = nil
 local g_PumpConnectionsCache = {}
 
--- global.pumps - array of entries, each entry is a pair of entity and a bool signifying if the pump should set the filter from circuit network
+CircuitMode =
+{
+	None = 0,
+	EnableDisable = 1,
+	SetFilter = 2
+}
+
+-- global.pumps - array of entries, each entry is a pair of entity and a CircuitMode
 -- global.wagons - array of entries, each entry is a pair of entity and a filter (string)
+
+function IsCircuitNetworkUnlocked(player)
+	return player.force.recipes['red-wire'] ~= nil and player.force.recipes['red-wire'].enabled
+end
+
+function IsLogisticNetworkUnlocked(player)
+	return player.force.recipes['roboport'] ~= nil and player.force.recipes['roboport'].enabled
+end
+
+function IsConnectedToCircuitNetwork(entity)
+	return entity.get_circuit_network(defines.wire_type.red, defines.circuit_connector_id.pump) ~= nil
+		or entity.get_circuit_network(defines.wire_type.green, defines.circuit_connector_id.pump) ~= nil
+end
+
+function IsConnectedToLogisticNetwork(entity)
+	local behavior = entity.get_control_behavior()
+	return behavior and behavior.connect_to_logistic_network
+end
 
 function QueryEntities(filter, fn)
 	local surfaces = {}
@@ -36,7 +61,7 @@ function QueryEntities(filter, fn)
 end
 
 function PopulatePumps()
-	global.pumps = QueryEntities({type='pump'}, function(entity) return {entity, false} end)
+	global.pumps = QueryEntities({type='pump'}, function(entity) return {entity, CircuitMode.None} end)
 end
 
 function InitGlobal()
@@ -65,7 +90,7 @@ function OnEntityBuilt(event)
 end
 
 function RegisterPump(entity)
-	global.pumps[entity.unit_number] = {entity, false}
+	global.pumps[entity.unit_number] = {entity, CircuitMode.None}
 	script.register_on_entity_destroyed(entity)
 end
 
@@ -79,10 +104,10 @@ function OnSettingsPasted(event)
 	if event.source.type == 'pump' and event.destination.name == 'filter-pump' then
 		-- that shouldn't noramlly happen, just being extra careful
 		if global.pumps[event.source.unit_number] == nil then
-			global.pumps[event.source.unit_number] = {event.source, false}
+			global.pumps[event.source.unit_number] = {event.source, CircuitMode.None}
 		end
 		if global.pumps[event.destination.unit_number] == nil then
-			global.pumps[event.destination.unit_number] = {event.destination, false}
+			global.pumps[event.destination.unit_number] = {event.destination, CircuitMode.None}
 		end
 
 		local filter = event.source.fluidbox.get_filter(1)
@@ -256,9 +281,22 @@ function GetFilterFromCircuitNetwork(pump)
 	return signal
 end
 
-function UpdateCircuit(pump, circuitFilterEnabled)
+function UpdateCircuit(pump, circuitMode)
 	local fb = pump.fluidbox
-	if circuitFilterEnabled then
+	if circuitMode == CircuitMode.None or circuitMode == CircuitMode.SetFilter then
+		if IsConnectedToCircuitNetwork(pump) then
+			-- hack away circuit control behavior
+			-- which is enabled/disabled by default and cannot be changed for pumps
+			local behavior = pump.get_control_behavior()
+			behavior.circuit_condition = {
+				comparator='=', 
+				first_signal={type='item', name='red-wire'},
+				second_signal={type='item', name='red-wire'}
+			}
+		end
+	end
+
+	if circuitMode == CircuitMode.SetFilter then
 		local newFilter = GetFilterFromCircuitNetwork(pump)
 		local filter = fb.get_filter(1)
 		if newFilter == nil and filter ~= nil then
