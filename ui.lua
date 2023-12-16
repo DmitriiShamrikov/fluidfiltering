@@ -9,7 +9,13 @@ local CHOOSE_LOGISTIC_SIGNAL_BUTTON_NAME = 'ui-logistic-signal-chooser'
 local LOGISITIC_CONNECT_CHECKBOX_NAME = 'ui-logistic-connect'
 
 local SIGNAL_FRAME_NAME = 'ui-signal'
+local SIGNAL_GROUP_NAME_PREFIX = 'ui-signal-group-'
 local SEARCH_BUTTON_NAME = 'ui-search'
+
+local SIGNALS_FRAME_HEIGHT = 930
+local SIGNALS_ROW_HEIGHT = 40 -- styles.slot_button.size
+local SIGNALS_GROUP_ROW_SIZE = 6
+local SIGNALS_ROW_SIZE = 10
 
 ----------------------------------------
 ----- UI creation and interaction ------
@@ -409,15 +415,25 @@ function OpenSignalChooseWindow(player)
 	local elements = {}
 	local signalFrame = player.gui.screen[SIGNAL_FRAME_NAME]
 	if signalFrame == nil then
-		CreateSignalChooseWindow(player, elements)
+		signalFrame = CreateSignalChooseWindow(player, elements)
 	else
-
+		elements = FetchSignalWindowElements(signalFrame)
+		signalFrame.bring_to_front()
 	end
 end
 
+function FetchSignalWindowElements(rootFrame)
+	local elements = {}
+	elements.groupsTable = FindElementByName(rootFrame, 'groupsTable')
+	elements.scrollPane = FindElementByName(rootFrame, 'scrollPane')
+	elements.scrollFrame = FindElementByName(rootFrame, 'scrollFrame')
+	return elements
+end
+
 function CreateSignalChooseWindow(player, elements)
-	local signalFrame = player.gui.screen.add{type='frame', name=SIGNAL_FRAME_NAME}
+	local signalFrame = player.gui.screen.add{type='frame', direction='vertical', name=SIGNAL_FRAME_NAME, style='inner_frame_in_outer_frame'}
 	signalFrame.auto_center = true
+	signalFrame.style.maximal_height = SIGNALS_FRAME_HEIGHT
 
 	local titleFlow = signalFrame.add{type='flow', direction='horizontal'}
 	titleFlow.drag_target = signalFrame
@@ -425,6 +441,7 @@ function CreateSignalChooseWindow(player, elements)
 	titleFlow.add{type='label', caption={'gui.select-signal'}, ignored_by_interaction=true, style='frame_title'}
 	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler_style'}
 	
+	--[[
 	titleFlow.add{
 		type='sprite-button',
 		name=SEARCH_BUTTON_NAME,
@@ -435,6 +452,7 @@ function CreateSignalChooseWindow(player, elements)
 		clicked_sprite='utility/search_black',
 		auto_toggle=true
 	}
+	]]
 
 	titleFlow.add{
 		type='sprite-button',
@@ -444,16 +462,82 @@ function CreateSignalChooseWindow(player, elements)
 		hovered_sprite='utility/close_black',
 		clicked_sprite='utility/close_black',
 	}
+
+	local contentFrame = signalFrame.add{type='frame', direction='vertical', style='crafting_frame'}
+
+	local groupsTable = contentFrame.add{type='table', name='groupsTable', column_count=SIGNALS_GROUP_ROW_SIZE, style='filter_group_table'}
+	
+	local wrapperFrame = contentFrame.add{type='frame', style='filter_frame'}
+	local scrollPane = wrapperFrame.add{type='scroll-pane', name='scrollPane', vertical_scroll_policy='always', horizontal_scroll_policy='never', style='filter_scroll_pane_in_tab'}
+	local scrollFrame = scrollPane.add{type='frame', direction='vertical', name='scrollFrame', style='filter_scroll_pane_background_frame'}
+
+	local groups = GetSignalGroups()
+	local selectedGroupName, _ = next(groups)
+
+	local maxRows = 0
+	for _, groupSignals in pairs(groups) do
+		local groupRows = 0
+		for _, subgroupSignals in pairs(groupSignals) do
+			groupRows = groupRows + math.ceil(#(subgroupSignals) / SIGNALS_ROW_SIZE)
+		end
+		maxRows = math.max(maxRows, groupRows)
+	end
+	local signalTableHeight = SIGNALS_ROW_HEIGHT * maxRows
+
+	for groupName, groupSignals in pairs(groups) do
+		local group = game.item_group_prototypes[groupName]
+		local button = groupsTable.add{type='sprite-button', name=SIGNAL_GROUP_NAME_PREFIX .. group.name, tooltip={'item-group-name.'..group.name}, style='filter_group_button_tab'}
+		button.add{type='label', caption='[font=item-group][img=item-group/' .. group.name .. '][/font]'}
+		button.toggled = selectedGroupName == groupName
+
+		local signalsTable = scrollFrame.add{type='table', name=group.name, column_count=SIGNALS_ROW_SIZE, style='filter_slot_table'}
+		signalsTable.visible = button.toggled
+		signalsTable.style.height = signalTableHeight
+		for _, subgroupSignals in pairs(groupSignals) do
+			for _, signal in pairs(subgroupSignals) do
+				local signalButton = signalsTable.add{type='choose-elem-button', elem_type='signal', signal=signal, style='slot_button'}
+				signalButton.locked = true
+			end
+			
+			local numEmptyWidgets = SIGNALS_ROW_SIZE - (#(subgroupSignals) % SIGNALS_ROW_SIZE)
+			for i = 1, numEmptyWidgets do
+				signalsTable.add{type='empty-widget'}
+			end
+		end
+	end
+
+	elements.groupsTable = groupsTable
+	elements.scrollPane = scrollPane
+	elements.scrollFrame = scrollFrame
+
+	return signalFrame
 end
 
-function CloseEntityWindow(element)
+function SelectSignalGroup(player, groupName)
+	local buttonName = SIGNAL_GROUP_NAME_PREFIX .. groupName
+	local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+	for _, button in pairs(elements.groupsTable.children) do
+		if button.type == 'sprite-button' then
+			button.toggled = button.name == buttonName
+		end
+	end
+	for _, table in pairs(elements.scrollFrame.children) do
+		table.visible = table.name == groupName
+	end
+	elements.scrollPane.scroll_to_top()
+end
+
+function CloseWindow(element)
+	local name = nil
 	while element ~= nil do
-		if element.name == ENTITY_FRAME_NAME then
+		if element.name == ENTITY_FRAME_NAME or element.name == SIGNAL_FRAME_NAME then
+			name = element.name
 			element.destroy()
 			break
 		end
 		element = element.parent
 	end
+	return name
 end
 
 ---------------------------------------
@@ -542,7 +626,10 @@ script.on_event(defines.events.on_gui_click, function(event)
 
 	if event.element.type == 'sprite-button' then
 		if event.element.name == CLOSE_BUTTON_NAME then
-			CloseEntityWindow(event.element)
+			local closedName = CloseWindow(event.element)
+			if closedName == ENTITY_FRAME_NAME and player.gui.screen[SIGNAL_FRAME_NAME] then
+				player.gui.screen[SIGNAL_FRAME_NAME].destroy()
+			end
 			g_SelectedEntity = nil
 		elseif event.element.name == CIRCUIT_BUTTON_NAME or event.element.name == LOGISTIC_BUTTON_NAME then
 			local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
@@ -554,6 +641,9 @@ script.on_event(defines.events.on_gui_click, function(event)
 				end
 			end
 			ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
+		elseif event.element.name:find(SIGNAL_GROUP_NAME_PREFIX, 1, true) ~= nil then
+			local group = event.element.name:sub(SIGNAL_GROUP_NAME_PREFIX:len() + 1)
+			SelectSignalGroup(player, group)
 		end
 	elseif event.element.type == 'checkbox' then
 		if event.element.name == LOGISITIC_CONNECT_CHECKBOX_NAME then
@@ -567,7 +657,7 @@ script.on_event(defines.events.on_gui_click, function(event)
 			if event.button == defines.mouse_button_type.right then
 				event.element.elem_value = nil
 			else
-				CreateSignalChooseWindow(player)
+				OpenSignalChooseWindow(player)
 			end
 		end
 	elseif event.element.type == 'radiobutton' then
@@ -594,7 +684,15 @@ script.on_event(defines.events.on_gui_click, function(event)
 end)
 
 script.on_event(defines.events.on_gui_closed, function(event)
+	local player = game.get_player(event.player_index)
+	if player == nil then
+		return
+	end
+
 	if event.element and event.element.name == ENTITY_FRAME_NAME then
+		if player.gui.screen[SIGNAL_FRAME_NAME] then
+			player.gui.screen[SIGNAL_FRAME_NAME].destroy()
+		end
 		event.element.destroy()
 		g_SelectedEntity = nil
 	end

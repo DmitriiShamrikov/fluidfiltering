@@ -66,6 +66,13 @@ styles.right_column = {
 	horizontal_align = "right"
 }
 
+data:extend{{
+	type = "font",
+	name = "item-group",
+	from = "default-semibold",
+	size = 36
+}}
+
 -- input
 data:extend{{
 	type = "custom-input",
