@@ -5,24 +5,89 @@ local CIRCUIT_BUTTON_NAME = 'ui-circuit'
 local LOGISTIC_BUTTON_NAME = 'ui-logistic'
 local CHOOSE_FILTER_BUTTON_NAME = 'ui-liquid-filter-chooser'
 local CHOOSE_CIRCUIT_SIGNAL_BUTTON_NAME = 'ui-circuit-signal-chooser'
+local CHOOSE_CIRCUIT_SIGNAL_FAKE_BUTTON_NAME = 'ui-circuit-signal-chooser-fake'
 local CHOOSE_LOGISTIC_SIGNAL_BUTTON_NAME = 'ui-logistic-signal-chooser'
+local CHOOSE_LOGISTIC_SIGNAL_FAKE_BUTTON_NAME = 'ui-logistic-signal-chooser-fake'
 local LOGISITIC_CONNECT_CHECKBOX_NAME = 'ui-logistic-connect'
 
 local SIGNAL_FRAME_NAME = 'ui-signal'
+local SIGNAL_SEARCH_BUTTON_NAME = 'ui-search'
 local SIGNAL_GROUP_NAME_PREFIX = 'ui-signal-group-'
-local SEARCH_BUTTON_NAME = 'ui-search'
+local SIGNAL_SIGNAL_NAME_PREFIX = 'ui-signal-signal-'
+local SIGNAL_CONSTANT_SLIDER_NAME = 'ui-signal-slider'
+local SIGNAL_CONSTANT_TEXT_NAME = 'ui-signal-text'
+local SIGNAL_SET_CONSTANT_BUTTON_NAME = 'ui-signal-set'
 
 local SIGNALS_FRAME_HEIGHT = 930
 local SIGNALS_ROW_HEIGHT = 40 -- styles.slot_button.size
 local SIGNALS_GROUP_ROW_SIZE = 6
 local SIGNALS_ROW_SIZE = 10
 
+local SIGNAL_VALUE_MIN = -2^31
+local SIGNAL_VALUE_MAX = 2^31 - 1
+
+function SliderValueToConstantValue(svalue)
+	local order = math.floor(svalue / 10)
+	local value = svalue % 10 + order
+	order = order + math.floor(value / 10)
+	value = value % 10 + math.floor(value / 10)
+	return value * 10^order
+end
+
+function ConstantValueToSliderValue(cvalue)
+	local firstChar = cvalue:sub(1,1)
+	if firstChar == '' or firstChar == '-' then
+		return 0
+	end
+	local order = cvalue:len() - 1
+	local value = tonumber(firstChar)
+	return value + 9 * order
+end
+
+function GetShortStringValue(value)
+	value = math.max(SIGNAL_VALUE_MIN, math.min(SIGNAL_VALUE_MAX, value))
+
+	local result = ''
+	if value < 0 then
+		value = -value
+		result = result .. '-'
+	end
+
+	if value < 1000 then
+		result = result .. tostring(value)
+	elseif value < 10000 then
+		local v = tostring(value/1000):sub(1,3)
+		if v:len() == 1 then
+			v = v .. '.0'
+		end
+		result = result .. v .. 'k'
+	elseif value < 1000000 then
+		result = result .. tostring(math.floor(value/1000)) .. 'k'
+	elseif value < 10000000 then
+		local v = tostring(value/1000000):sub(1,3)
+		if v:len() == 1 then
+			v = v .. '.0'
+		end
+		result = result .. v .. 'M'
+	elseif value < 1000000000 then
+		result = result .. tostring(math.floor(value/1000000)) .. 'M'
+	else
+		local v = tostring(value/1000000000):sub(1,3)
+		if v:len() == 1 then
+			v = v .. '.0'
+		end
+		result = result .. v .. 'G'
+	end
+
+	return result
+end
+
 ----------------------------------------
 ----- UI creation and interaction ------
 ----------------------------------------
 
 function FindElementByName(root, name)
-	if root.name == name then
+	if not root or root.name == name then
 		return root
 	end
 
@@ -261,6 +326,8 @@ function FetchEntityWindowElements(entityFrame)
 	elements.circuitMode.enableDisableRadio = FindElementByName(entityFrame, 'circuitModeEnableDisableRadio')
 	elements.circuitMode.setFilterRadio = FindElementByName(entityFrame, 'circuitModeSetFilterRadio')
 	elements.circuitEnableConditionFlow = FindElementByName(entityFrame, 'circuitEnableConditionFlow')
+	elements.circuitConditionSignalChooser = FindElementByName(entityFrame, CHOOSE_CIRCUIT_SIGNAL_BUTTON_NAME)
+	elements.circuitConditionSignalFakeChooser = FindElementByName(entityFrame, CHOOSE_CIRCUIT_SIGNAL_FAKE_BUTTON_NAME)
 
 	elements.logisticFlow = FindElementByName(entityFrame, 'logisticFlow')
 	elements.logisticConnectionFlow = FindElementByName(entityFrame, 'logisticConnectionFlow')
@@ -268,6 +335,8 @@ function FetchEntityWindowElements(entityFrame)
 	elements.logisticConnectCheckbox = FindElementByName(entityFrame, LOGISITIC_CONNECT_CHECKBOX_NAME)
 	elements.logisticInnerFlow = FindElementByName(entityFrame, 'logisticInnerFlow')
 	elements.logisitcEnableConditionFlow = FindElementByName(entityFrame, 'logisitcEnableConditionFlow')
+	elements.logisitcConditionSignalChooser = FindElementByName(entityFrame, CHOOSE_LOGISTIC_SIGNAL_BUTTON_NAME)
+	elements.logisitcConditionSignalFakeChooser = FindElementByName(entityFrame, CHOOSE_LOGISTIC_SIGNAL_FAKE_BUTTON_NAME)
 	return elements
 end
 
@@ -281,7 +350,7 @@ function CreateEntityWindow(player, elements)
 	titleFlow.drag_target = entityFrame
 	titleFlow.style.horizontal_spacing = 8
 	elements.title = titleFlow.add{type='label', ignored_by_interaction=true, style='frame_title', name='title'}
-	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler_style'}
+	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler'}
 
 	elements.circuitButton = titleFlow.add{
 		type='sprite-button',
@@ -352,9 +421,9 @@ function CreateCircuitConditionBlock(root, elements)
 	elements.greenNetworkId = innerFlow.add{type='label', name='greenNetworkId'}
 	innerFlow.add{type='line', direction='horizontal'}
 	innerFlow.add{type='label', caption={'gui-control-behavior.mode-of-operation'}, style='caption_label'}
-	local noneRadio = innerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.none'}, tooltip={'gui-control-behavior-modes.none-write-description'}, state=true, name='circuitModeNoneRadio'}
-	local enDisRadio = innerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.enable-disable'}, tooltip={'gui-control-behavior-modes.enable-disable-description'}, state=false, name='circuitModeEnableDisableRadio'}
-	local setFilterRadio = innerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.set-filters'}, tooltip={'gui-control-behavior-modes.set-filters-description'}, state=false, name='circuitModeSetFilterRadio'}
+	local noneRadio = innerFlow.add{type='radiobutton', tags={radiogroup='circuit'}, caption={'gui-control-behavior-modes.none'}, tooltip={'gui-control-behavior-modes.none-write-description'}, state=true, name='circuitModeNoneRadio'}
+	local enDisRadio = innerFlow.add{type='radiobutton', tags={radiogroup='circuit'}, caption={'gui-control-behavior-modes.enable-disable'}, tooltip={'gui-control-behavior-modes.enable-disable-description'}, state=false, name='circuitModeEnableDisableRadio'}
+	local setFilterRadio = innerFlow.add{type='radiobutton', tags={radiogroup='circuit'}, caption={'gui-control-behavior-modes.set-filters'}, tooltip={'gui-control-behavior-modes.set-filters-description'}, state=false, name='circuitModeSetFilterRadio'}
 	--innerFlow.add{type='checkbox', caption={'gui-control-behavior-modes.read-contents'}, tooltip={'gui-control-behavior-modes.read-contents-description'}, state=false}
 	
 	elements.circuitFlow = circuitFlow
@@ -377,7 +446,7 @@ function CreateLogisticConditionBlock(root, elements)
 	local innerFlow = logisticFlow.add{type='flow', direction='vertical', name='logisticInnerFlow'}
 	innerFlow.add{type='line', direction='horizontal'}
 	innerFlow.add{type='label', caption={'gui-control-behavior.mode-of-operation'}, style='caption_label'}
-	innerFlow.add{type='radiobutton', caption={'gui-control-behavior-modes.enable-disable'}, tooltip={'gui-control-behavior-modes.enable-disable-description'}, state=true}
+	innerFlow.add{type='radiobutton', tags={radiogroup='logistic'}, caption={'gui-control-behavior-modes.enable-disable'}, tooltip={'gui-control-behavior-modes.enable-disable-description'}, state=true}
 
 	elements.logisticFlow = logisticFlow
 	elements.logisticConnectionFlow = connectionFlow
@@ -392,26 +461,29 @@ function CreateEnabledDisabledBlock(root, elements, isCircuit)
 	local conditionFlow = root.add{type='flow', direction='vertical', name=flowName}
 	conditionFlow.add{type='line', direction='horizontal'}
 	conditionFlow.add{type='label', caption={'gui-control-behavior-modes-guis.enabled-condition'}, style='caption_label'}
-	local conditionSelectorFlow = conditionFlow.add{type='flow', direction='horizontal'}
-	conditionSelectorFlow.style.vertical_align = 'center'
-	conditionSelectorFlow.add{type='choose-elem-button', elem_type='signal'}
+	local conditionSelectorFlow = conditionFlow.add{type='flow', direction='horizontal', style='centering_horizontal_flow'}
+	conditionSelectorFlow.add{type='choose-elem-button', elem_type='signal', style='slot_button_in_shallow_frame'}
 	conditionSelectorFlow.add{type='drop-down', items={'>', '<', '=', '≥', '≤', '≠'}, selected_index=2, style='circuit_condition_comparator_dropdown'}
 	local chooserName = isCircuit and CHOOSE_CIRCUIT_SIGNAL_BUTTON_NAME or CHOOSE_LOGISTIC_SIGNAL_BUTTON_NAME
-	local rightChooser = conditionSelectorFlow.add{type='choose-elem-button', elem_type='signal', name=chooserName}
+	local rightChooser = conditionSelectorFlow.add{type='choose-elem-button', elem_type='signal', name=chooserName, style='slot_button_in_shallow_frame'}
 	rightChooser.locked = true -- don't open default chooser window, we create our own
+	-- this is needed to show constant value
+	local fakeChooserName = isCircuit and CHOOSE_CIRCUIT_SIGNAL_FAKE_BUTTON_NAME or CHOOSE_LOGISTIC_SIGNAL_FAKE_BUTTON_NAME
+	local fakeChooser = conditionSelectorFlow.add{type='button', name=fakeChooserName, style='constant_button', tooltip={'gui.constant-number'}}
+	fakeChooser.visible = false
 
 	if isCircuit then
 		elements.circuitEnableConditionFlow = conditionFlow
+		elements.circuitConditionSignalChooser = rightChooser
+		elements.circuitConditionSignalFakeChooser = fakeChooser
 	else
 		elements.logisitcEnableConditionFlow = conditionFlow
+		elements.logisitcConditionSignalChooser = rightChooser
+		elements.logisitcConditionSignalFakeChooser = fakeChooser
 	end
 end
 
 function OpenSignalChooseWindow(player)
-	-- okay, it looks like we will fail to mimic original UI completely and it would be noticable and ugly
-	-- plus I personally don't think the original UI is the best UI
-	-- so: copy the idea, have our reasonable implementation
-
 	local elements = {}
 	local signalFrame = player.gui.screen[SIGNAL_FRAME_NAME]
 	if signalFrame == nil then
@@ -427,6 +499,8 @@ function FetchSignalWindowElements(rootFrame)
 	elements.groupsTable = FindElementByName(rootFrame, 'groupsTable')
 	elements.scrollPane = FindElementByName(rootFrame, 'scrollPane')
 	elements.scrollFrame = FindElementByName(rootFrame, 'scrollFrame')
+	elements.constantSlider = FindElementByName(rootFrame, SIGNAL_CONSTANT_SLIDER_NAME)
+	elements.constantText = FindElementByName(rootFrame, SIGNAL_CONSTANT_TEXT_NAME)
 	return elements
 end
 
@@ -439,12 +513,12 @@ function CreateSignalChooseWindow(player, elements)
 	titleFlow.drag_target = signalFrame
 	titleFlow.style.horizontal_spacing = 8
 	titleFlow.add{type='label', caption={'gui.select-signal'}, ignored_by_interaction=true, style='frame_title'}
-	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler_style'}
+	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler'}
 	
 	--[[
 	titleFlow.add{
 		type='sprite-button',
-		name=SEARCH_BUTTON_NAME,
+		name=SIGNAL_SEARCH_BUTTON_NAME,
 		style='frame_action_button',
 		tooltip={'gui.search-with-focus', '__CONTROL__focus-search__'},
 		sprite='utility/search_white',
@@ -486,7 +560,7 @@ function CreateSignalChooseWindow(player, elements)
 
 	for groupName, groupSignals in pairs(groups) do
 		local group = game.item_group_prototypes[groupName]
-		local button = groupsTable.add{type='sprite-button', name=SIGNAL_GROUP_NAME_PREFIX .. group.name, tooltip={'item-group-name.'..group.name}, style='filter_group_button_tab'}
+		local button = groupsTable.add{type='sprite-button', name=group.name, tags={type='signal-group'}, tooltip={'item-group-name.'..group.name}, style='filter_group_button_tab'}
 		button.add{type='label', caption='[font=item-group][img=item-group/' .. group.name .. '][/font]'}
 		button.toggled = selectedGroupName == groupName
 
@@ -495,7 +569,7 @@ function CreateSignalChooseWindow(player, elements)
 		signalsTable.style.height = signalTableHeight
 		for _, subgroupSignals in pairs(groupSignals) do
 			for _, signal in pairs(subgroupSignals) do
-				local signalButton = signalsTable.add{type='choose-elem-button', elem_type='signal', signal=signal, style='slot_button'}
+				local signalButton = signalsTable.add{type='choose-elem-button', elem_type='signal', signal=signal, tags={type='signal'}, style='slot_button'}
 				signalButton.locked = true
 			end
 			
@@ -506,25 +580,56 @@ function CreateSignalChooseWindow(player, elements)
 		end
 	end
 
+	local constantFrame = contentFrame.add{type='frame', direction='vertical', style='inside_shallow_frame_with_padding'}
+
+	constantFrame.add{type='label', caption={'gui.or-set-a-constant'}, style='frame_title'}
+
+	local constantFlow = constantFrame.add{type='flow', direction='horizontal', style='centering_horizontal_flow'}
+	local constantSlider = constantFlow.add{type='slider', maximum_value=41, name=SIGNAL_CONSTANT_SLIDER_NAME}
+	local constantText = constantFlow.add{type='textfield', text=0, numeric=true, allow_negative=true, name=SIGNAL_CONSTANT_TEXT_NAME, style='slider_value_textfield'}
+	constantFlow.add{type='empty-widget', style='horizontal_filler'}
+	constantFlow.add{type='button', name=SIGNAL_SET_CONSTANT_BUTTON_NAME, caption={'gui.set'}, style='green_button'}
+
 	elements.groupsTable = groupsTable
 	elements.scrollPane = scrollPane
 	elements.scrollFrame = scrollFrame
+	elements.constantSlider = constantSlider
+	elements.constantText = constantText
 
 	return signalFrame
 end
 
 function SelectSignalGroup(player, groupName)
-	local buttonName = SIGNAL_GROUP_NAME_PREFIX .. groupName
 	local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
 	for _, button in pairs(elements.groupsTable.children) do
 		if button.type == 'sprite-button' then
-			button.toggled = button.name == buttonName
+			button.toggled = button.name == groupName
 		end
 	end
 	for _, table in pairs(elements.scrollFrame.children) do
 		table.visible = table.name == groupName
 	end
 	elements.scrollPane.scroll_to_top()
+end
+
+function SelectSignal(player, signal)
+	local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+	if elements.circuitFlow.visible then
+		elements.circuitConditionSignalChooser.visible = true
+		elements.circuitConditionSignalChooser.elem_value = signal
+		elements.circuitConditionSignalFakeChooser.visible = false
+		elements.circuitConditionSignalFakeChooser.caption = ''
+	end
+end
+
+function SelectConstant(player, value)
+	local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+	if elements.circuitFlow.visible then
+		elements.circuitConditionSignalChooser.visible = false
+		elements.circuitConditionSignalChooser.elem_value = nil
+		elements.circuitConditionSignalFakeChooser.visible = true
+		elements.circuitConditionSignalFakeChooser.caption = GetShortStringValue(tonumber(value))
+	end
 end
 
 function CloseWindow(element)
@@ -624,43 +729,62 @@ script.on_event(defines.events.on_gui_click, function(event)
 		return
 	end
 
-	if event.element.type == 'sprite-button' then
-		if event.element.name == CLOSE_BUTTON_NAME then
-			local closedName = CloseWindow(event.element)
-			if closedName == ENTITY_FRAME_NAME and player.gui.screen[SIGNAL_FRAME_NAME] then
-				player.gui.screen[SIGNAL_FRAME_NAME].destroy()
-			end
-			g_SelectedEntity = nil
-		elseif event.element.name == CIRCUIT_BUTTON_NAME or event.element.name == LOGISTIC_BUTTON_NAME then
-			local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
-			if event.element.toggled then
-				if event.element.name == CIRCUIT_BUTTON_NAME then
-					elements.logisticButton.toggled = false
-				else
-					elements.circuitButton.toggled = false
-				end
-			end
-			ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
-		elseif event.element.name:find(SIGNAL_GROUP_NAME_PREFIX, 1, true) ~= nil then
-			local group = event.element.name:sub(SIGNAL_GROUP_NAME_PREFIX:len() + 1)
-			SelectSignalGroup(player, group)
+	---- Signal Selection Window handling ----
+	if event.element.name == SIGNAL_SET_CONSTANT_BUTTON_NAME then
+		local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+		SelectConstant(player, elements.constantText.text)
+		CloseWindow(event.element)
+		return
+	elseif event.element.tags then
+		if event.element.tags.type == 'signal-group' then
+			SelectSignalGroup(player, event.element.name)
+		elseif event.element.tags.type == 'signal' then
+			SelectSignal(player, event.element.elem_value)
+			CloseWindow(event.element)
+			return
 		end
-	elseif event.element.type == 'checkbox' then
-		if event.element.name == LOGISITIC_CONNECT_CHECKBOX_NAME then
-			local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
-			ConnectToLogisiticNetwork(event.player_index, event.element.state)
-			FillLogisticBlock(elements, g_SelectedEntity)
-			ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
+	end
+
+	local textField = FindElementByName(player.gui.screen[SIGNAL_FRAME_NAME], SIGNAL_CONSTANT_TEXT_NAME)
+	if textField and textField.text == '' then
+		textField.text = '0'
+	end
+	------------------------------------------
+
+	---- Entity Window handling ----
+	if event.element.name == CLOSE_BUTTON_NAME then
+		local closedName = CloseWindow(event.element)
+		if closedName == ENTITY_FRAME_NAME and player.gui.screen[SIGNAL_FRAME_NAME] then
+			player.gui.screen[SIGNAL_FRAME_NAME].destroy()
 		end
-	elseif event.element.type == 'choose-elem-button' then
-		if event.element.name == CHOOSE_CIRCUIT_SIGNAL_BUTTON_NAME then
-			if event.button == defines.mouse_button_type.right then
+		g_SelectedEntity = nil
+	elseif event.element.name == CIRCUIT_BUTTON_NAME or event.element.name == LOGISTIC_BUTTON_NAME then
+		local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+		if event.element.toggled then
+			if event.element.name == CIRCUIT_BUTTON_NAME then
+				elements.logisticButton.toggled = false
+			else
+				elements.circuitButton.toggled = false
+			end
+		end
+		ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
+	elseif event.element.name == LOGISITIC_CONNECT_CHECKBOX_NAME then
+		local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+		ConnectToLogisiticNetwork(event.player_index, event.element.state)
+		FillLogisticBlock(elements, g_SelectedEntity)
+		ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
+	elseif event.element.name == CHOOSE_CIRCUIT_SIGNAL_BUTTON_NAME or event.element.name == CHOOSE_CIRCUIT_SIGNAL_FAKE_BUTTON_NAME or
+			event.element.name == CHOOSE_LOGISTIC_SIGNAL_BUTTON_NAME or event.element.name == CHOOSE_LOGISTIC_SIGNAL_FAKE_BUTTON_NAME then
+		if event.button == defines.mouse_button_type.right then
+			if event.element.type == 'choose-elem-button' then
 				event.element.elem_value = nil
 			else
-				OpenSignalChooseWindow(player)
+				event.element.caption = ''
 			end
+		else
+			OpenSignalChooseWindow(player)
 		end
-	elseif event.element.type == 'radiobutton' then
+	elseif event.element.tags and event.element.tags.radiogroup == 'circuit' then
 		local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
 		for _, radio in pairs(elements.circuitMode) do
 			if radio ~= event.element then
@@ -680,6 +804,43 @@ script.on_event(defines.events.on_gui_click, function(event)
 		UpdateCircuit(g_SelectedEntity, circuitMode)
 		FillFilterButton(elements.chooseButton, g_SelectedEntity, circuitMode == CircuitMode.SetFilter)
 		ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
+	end
+end)
+
+script.on_event(defines.events.on_gui_value_changed, function(event)
+	local player = game.get_player(event.player_index)
+	if player == nil then
+		return
+	end
+
+	if event.element.name == SIGNAL_CONSTANT_SLIDER_NAME then
+		local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+		elements.constantText.text = tostring(SliderValueToConstantValue(event.element.slider_value))
+	end
+end)
+
+script.on_event(defines.events.on_gui_text_changed, function(event)
+	local player = game.get_player(event.player_index)
+	if player == nil then
+		return
+	end
+
+	if event.element.name == SIGNAL_CONSTANT_TEXT_NAME then
+		local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+		elements.constantSlider.slider_value = ConstantValueToSliderValue(event.element.text)
+	end
+end)
+
+script.on_event(defines.events.on_gui_confirmed, function(event)
+	local player = game.get_player(event.player_index)
+	if player == nil then
+		return
+	end
+
+	if event.element.name == SIGNAL_CONSTANT_TEXT_NAME then
+		local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+		SelectConstant(player, tonumber(elements.constantText.text))
+		CloseWindow(event.element)
 	end
 end)
 

@@ -46,11 +46,17 @@ data:extend{filterWagonRecipe}
 
 -- gui
 local styles = data.raw["gui-style"].default
-styles.header_filler_style = {
+styles.header_filler = {
 	type = "empty_widget_style",
 	parent = "draggable_space_header",
 	horizontally_stretchable = "on",
 	vertically_stretchable = "on",
+	height = 24
+}
+
+styles.horizontal_filler = {
+	type = "empty_widget_style",
+	horizontally_stretchable = "on",
 	height = 24
 }
 
@@ -64,6 +70,16 @@ styles.right_column = {
 	type = "vertical_flow_style",
 	minimal_width = styles["wide_entity_button"].minimal_width / 2,
 	horizontal_align = "right"
+}
+
+styles.constant_button = {
+	type = "button_style",
+	parent = "slot_button_in_shallow_frame",
+	font = "default-game",
+	default_font_color = {1,1,1},
+	clicked_font_color = {1,1,1},
+	hovered_font_color = {1,1,1},
+	maximal_width = 62,
 }
 
 data:extend{{
