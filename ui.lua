@@ -254,6 +254,9 @@ function OpenEntityWindow(player, entity)
 	elements.circuitConditionSignal2Chooser.visible = circuitCondition.second_signal ~= nil
 	elements.circuitConditionSignal2FakeChooser.caption = circuitCondition.constant ~= nil and GetShortStringValue(circuitCondition.constant) or 0
 	elements.circuitConditionSignal2FakeChooser.visible = not elements.circuitConditionSignal2Chooser.visible
+	local tags = elements.circuitConditionSignal2FakeChooser.tags or {}
+	tags.value = circuitCondition.constant
+	elements.circuitConditionSignal2FakeChooser.tags = tags
 
 	FillLogisticBlock(elements, entity)
 
@@ -264,6 +267,9 @@ function OpenEntityWindow(player, entity)
 	elements.logisitcConditionSignal2Chooser.visible = logisitcCondition.second_signal ~= nil
 	elements.logisitcConditionSignal2FakeChooser.caption = logisitcCondition.constant ~= nil and GetShortStringValue(logisitcCondition.constant) or 0
 	elements.logisitcConditionSignal2FakeChooser.visible = not elements.logisitcConditionSignal2Chooser.visible
+	tags = elements.logisitcConditionSignal2FakeChooser.tags or {}
+	tags.value = logisitcCondition.constant
+	elements.logisitcConditionSignal2FakeChooser.tags = tags
 
 	ToggleCircuitLogisiticBlocksVisibility(player, entity, elements)
 	
@@ -522,7 +528,7 @@ function CreateEnabledDisabledBlock(root, elements, isCircuit)
 	end
 end
 
-function OpenSignalChooseWindow(player)
+function OpenSignalChooseWindow(player, signal, constant)
 	local elements = {}
 	local signalFrame = player.gui.screen[SIGNAL_FRAME_NAME]
 	if signalFrame == nil then
@@ -531,6 +537,14 @@ function OpenSignalChooseWindow(player)
 		elements = FetchSignalWindowElements(signalFrame)
 		signalFrame.bring_to_front()
 	end
+
+	local signalGroup = signal and GetSignalGroup(signal.name) or nil
+	if signalGroup then
+		SelectSignalGroup(elements, signalGroup)
+	end
+
+	elements.constantText.text = tostring(constant)
+	elements.constantSlider.slider_value = ConstantValueToSliderValue(tostring(constant))
 end
 
 function FetchSignalWindowElements(rootFrame)
@@ -638,8 +652,7 @@ function CreateSignalChooseWindow(player, elements)
 	return signalFrame
 end
 
-function SelectSignalGroup(player, groupName)
-	local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+function SelectSignalGroup(elements, groupName)
 	for _, button in pairs(elements.groupsTable.children) do
 		if button.type == 'sprite-button' then
 			button.toggled = button.name == groupName
@@ -651,8 +664,7 @@ function SelectSignalGroup(player, groupName)
 	elements.scrollPane.scroll_to_top()
 end
 
-function SelectSignal(player, signal)
-	local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+function SelectSignal(elements, signal)
 	if elements.circuitFlow.visible then
 		elements.circuitConditionSignal2Chooser.visible = true
 		elements.circuitConditionSignal2Chooser.elem_value = signal
@@ -673,6 +685,9 @@ function SelectConstant(player, value)
 		elements.circuitConditionSignal2Chooser.elem_value = nil
 		elements.circuitConditionSignal2FakeChooser.visible = true
 		elements.circuitConditionSignal2FakeChooser.caption = GetShortStringValue(number)
+		local tags = elements.circuitConditionSignal2FakeChooser.tags
+		tags.value = number
+		elements.circuitConditionSignal2FakeChooser.tags = tags
 		SetEnabledCondition(elements.circuitConditionSignal2FakeChooser, number)
 	end
 
@@ -696,23 +711,23 @@ end
 ----- Apply changes to the entity -----
 ---------------------------------------
 
-function SetFilter(player, fluid)
-	if g_SelectedEntity.type == 'pump' then
+function SetFilter(player, entity, fluid)
+	if entity.type == 'pump' then
 		if fluid == nil then
-			g_SelectedEntity.fluidbox.set_filter(1, nil)
+			entity.fluidbox.set_filter(1, nil)
 		else
-			g_SelectedEntity.fluidbox.set_filter(1, {name=fluid, force=true})
+			entity.fluidbox.set_filter(1, {name=fluid, force=true})
 		end
 	else -- fluid-wagon
 		if fluid == nil then
-			global.wagons[g_SelectedEntity.unit_number] = nil
+			global.wagons[entity.unit_number] = nil
 		else
-			global.wagons[g_SelectedEntity.unit_number] = {g_SelectedEntity, fluid}
-			script.register_on_entity_destroyed(g_SelectedEntity)
+			global.wagons[entity.unit_number] = {entity, fluid}
+			script.register_on_entity_destroyed(entity)
 		end
 	end
 
-	player.print('Setting filter for entity ' .. g_SelectedEntity.unit_number .. ': ' .. (fluid or 'none'))
+	player.print('Setting filter for entity ' .. entity.unit_number .. ': ' .. (fluid or 'none'))
 end
 
 function ConnectToLogisiticNetwork(connect)
@@ -778,12 +793,6 @@ script.on_event('open_gui', function(event)
 	OnGuiOpened(event)
 end)
 
-script.on_event(defines.events.on_gui_elem_changed, function(event)
-	if g_SelectedEntity ~= nil and event.element.name == CHOOSE_FILTER_BUTTON_NAME then
-		SetFilter(event.player_index, event.element.elem_value)
-	end
-end)
-
 script.on_event(defines.events.on_gui_click, function(event)
 	local player = game.get_player(event.player_index)
 	if player == nil or g_SelectedEntity == nil then
@@ -798,9 +807,11 @@ script.on_event(defines.events.on_gui_click, function(event)
 		return
 	elseif event.element.tags then
 		if event.element.tags.type == 'signal-group' then
-			SelectSignalGroup(player, event.element.name)
+			local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+			SelectSignalGroup(elements, event.element.name)
 		elseif event.element.tags.type == 'signal' then
-			SelectSignal(player, event.element.elem_value)
+			local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+			SelectSignal(elements, event.element.elem_value)
 			CloseWindow(event.element)
 			return
 		end
@@ -815,10 +826,12 @@ script.on_event(defines.events.on_gui_click, function(event)
 	---- Entity Window handling ----
 	if event.element.name == CLOSE_BUTTON_NAME then
 		local closedName = CloseWindow(event.element)
-		if closedName == ENTITY_FRAME_NAME and player.gui.screen[SIGNAL_FRAME_NAME] then
-			player.gui.screen[SIGNAL_FRAME_NAME].destroy()
+		if closedName == ENTITY_FRAME_NAME then
+			if player.gui.screen[SIGNAL_FRAME_NAME] then
+				player.gui.screen[SIGNAL_FRAME_NAME].destroy()
+			end
+			g_SelectedEntity = nil
 		end
-		g_SelectedEntity = nil
 	elseif event.element.name == CIRCUIT_BUTTON_NAME or event.element.name == LOGISTIC_BUTTON_NAME then
 		local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
 		if event.element.toggled then
@@ -844,7 +857,9 @@ script.on_event(defines.events.on_gui_click, function(event)
 				event.element.caption = ''
 			end
 		else
-			OpenSignalChooseWindow(player)
+			local signal = event.element.type == 'choose-elem-button' and event.element.elem_value or nil
+			local constant = event.element.type == 'button' and event.element.tags.value or 0
+			OpenSignalChooseWindow(player, signal, constant)
 		end
 	elseif event.element.tags and event.element.tags.radiogroup == 'circuit' then
 		local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
@@ -871,11 +886,13 @@ end)
 
 script.on_event(defines.events.on_gui_elem_changed, function(event)
 	local player = game.get_player(event.player_index)
-	if player == nil then
+	if player == nil or g_SelectedEntity == nil then
 		return
 	end
 
-	if event.element.tags and event.element.tags.enable_disable then
+	if event.element.name == CHOOSE_FILTER_BUTTON_NAME then
+		SetFilter(player, g_SelectedEntity, event.element.elem_value)
+	elseif event.element.tags and event.element.tags.enable_disable then
 		SetEnabledCondition(event.element, nil)
 	end
 end)

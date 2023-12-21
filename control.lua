@@ -80,6 +80,19 @@ function GetSignalGroups()
 	return g_Signals
 end
 
+function GetSignalGroup(signalName)
+	for groupName, signals in pairs(g_Signals) do
+		for _, subgroup in pairs(signals) do
+			for _, signal in pairs(subgroup) do
+				if signal.name == signalName then
+					return groupName
+				end
+			end
+		end
+	end
+	return nil
+end
+
 function IsCircuitNetworkUnlocked(player)
 	return player.force.recipes['red-wire'] ~= nil and player.force.recipes['red-wire'].enabled
 end
@@ -339,22 +352,24 @@ function GetFilterFromCircuitNetwork(pump)
 end
 
 function UpdateCircuit(pump, circuitMode)
-	local fb = pump.fluidbox
 	if circuitMode == CircuitMode.None or circuitMode == CircuitMode.SetFilter then
 		if IsConnectedToCircuitNetwork(pump) then
 			-- hack away circuit control behavior
 			-- which is enabled/disabled by default and cannot be changed for pumps
 			local behavior = pump.get_control_behavior()
-			behavior.circuit_condition = {
-				comparator='=', 
-				first_signal={type='item', name='red-wire'},
-				second_signal={type='item', name='red-wire'}
-			}
+			if behavior then
+				behavior.circuit_condition = {condition={
+					comparator='=',
+					first_signal={type='item', name='red-wire'},
+					second_signal={type='item', name='red-wire'}
+				}}
+			end
 		end
 	end
 
 	if circuitMode == CircuitMode.SetFilter then
 		local newFilter = GetFilterFromCircuitNetwork(pump)
+		local fb = pump.fluidbox
 		local filter = fb.get_filter(1)
 		if newFilter == nil and filter ~= nil then
 			fb.set_filter(1, nil)
@@ -451,5 +466,17 @@ water: filter-fluid-wagon[water] -> filter-pump[water] -> pipe | yes
 steam: filter-fluid-wagon[steam] -> filter-pump[water] -> pipe | no
 water: filter-fluid-wagon[water] -> filter-pump[]      -> pipe | yes
 steam: filter-fluid-wagon[steam] -> filter-pump[]      -> pipe | yes
+
+-- filter-pumps with circuits
+-- everything is connected to a red wire sending [steam=1]
+water: pipe -> filter-pump[None][]      -> pipe | yes
+water: pipe -> filter-pump[None][water] -> pipe | yes
+water: pipe -> filter-pump[None][steam] -> pipe | no
+water: pipe -> filter-pump[steam=1][]      -> pipe | yes
+water: pipe -> filter-pump[steam=1][water] -> pipe | yes
+water: pipe -> filter-pump[steam=1][steam] -> pipe | no
+water: pipe -> filter-pump[steam=2][steam] -> pipe | no
+water: pipe -> filter-pump[set][*] -> pipe | no
+steam: pipe -> filter-pump[set][*] -> pipe | yes
 
 ]]
