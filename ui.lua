@@ -245,31 +245,11 @@ function OpenEntityWindow(player, entity)
 		end
 	end
 
-	local behavior = entity.get_or_create_control_behavior()
-
-	local circuitCondition = behavior.circuit_condition.condition
-	elements.circuitConditionSignal1Chooser.elem_value = circuitCondition.first_signal
-	elements.circuitConditionComparatorList.selected_index = IndexOf(elements.circuitConditionComparatorList.items, circuitCondition.comparator)
-	elements.circuitConditionSignal2Chooser.elem_value = circuitCondition.second_signal
-	elements.circuitConditionSignal2Chooser.visible = circuitCondition.second_signal ~= nil
-	elements.circuitConditionSignal2FakeChooser.caption = circuitCondition.constant ~= nil and GetShortStringValue(circuitCondition.constant) or 0
-	elements.circuitConditionSignal2FakeChooser.visible = not elements.circuitConditionSignal2Chooser.visible
-	local tags = elements.circuitConditionSignal2FakeChooser.tags or {}
-	tags.value = circuitCondition.constant
-	elements.circuitConditionSignal2FakeChooser.tags = tags
+	FillCircuitCondition(elements, entity)
 
 	FillLogisticBlock(elements, entity)
 
-	local logisitcCondition = behavior.logistic_condition.condition
-	elements.logisitcConditionSignal1Chooser.elem_value = logisitcCondition.first_signal
-	elements.logisitcConditionComparatorList.selected_index = IndexOf(elements.logisitcConditionComparatorList.items, logisitcCondition.comparator)
-	elements.logisitcConditionSignal2Chooser.elem_value = logisitcCondition.second_signal
-	elements.logisitcConditionSignal2Chooser.visible = logisitcCondition.second_signal ~= nil
-	elements.logisitcConditionSignal2FakeChooser.caption = logisitcCondition.constant ~= nil and GetShortStringValue(logisitcCondition.constant) or 0
-	elements.logisitcConditionSignal2FakeChooser.visible = not elements.logisitcConditionSignal2Chooser.visible
-	tags = elements.logisitcConditionSignal2FakeChooser.tags or {}
-	tags.value = logisitcCondition.constant
-	elements.logisitcConditionSignal2FakeChooser.tags = tags
+	FillLogisticCondition(elements, entity)
 
 	ToggleCircuitLogisiticBlocksVisibility(player, entity, elements)
 	
@@ -303,6 +283,32 @@ function FillLogisticBlock(elements, entity)
 		elements.logisticConnectedLabel.caption = {'gui-control-behavior.not-connected'}
 	end
 	elements.logisticConnectCheckbox.state = isConnected
+end
+
+function FillCircuitCondition(elements, entity)
+	local condition = entity.get_or_create_control_behavior().circuit_condition.condition
+	elements.circuitConditionSignal1Chooser.elem_value = condition.first_signal
+	elements.circuitConditionComparatorList.selected_index = IndexOf(elements.circuitConditionComparatorList.items, condition.comparator)
+	elements.circuitConditionSignal2Chooser.elem_value = condition.second_signal
+	elements.circuitConditionSignal2Chooser.visible = condition.second_signal ~= nil
+	elements.circuitConditionSignal2FakeChooser.caption = condition.constant ~= nil and GetShortStringValue(condition.constant) or 0
+	elements.circuitConditionSignal2FakeChooser.visible = not elements.circuitConditionSignal2Chooser.visible
+	local tags = elements.circuitConditionSignal2FakeChooser.tags or {}
+	tags.value = condition.constant
+	elements.circuitConditionSignal2FakeChooser.tags = tags
+end
+
+function FillLogisticCondition(elements, entity)
+	local condition = entity.get_or_create_control_behavior().logistic_condition.condition
+	elements.logisitcConditionSignal1Chooser.elem_value = condition.first_signal
+	elements.logisitcConditionComparatorList.selected_index = IndexOf(elements.logisitcConditionComparatorList.items, condition.comparator)
+	elements.logisitcConditionSignal2Chooser.elem_value = condition.second_signal
+	elements.logisitcConditionSignal2Chooser.visible = condition.second_signal ~= nil
+	elements.logisitcConditionSignal2FakeChooser.caption = condition.constant ~= nil and GetShortStringValue(condition.constant) or 0
+	elements.logisitcConditionSignal2FakeChooser.visible = not elements.logisitcConditionSignal2Chooser.visible
+	tags = elements.logisitcConditionSignal2FakeChooser.tags or {}
+	tags.value = condition.constant
+	elements.logisitcConditionSignal2FakeChooser.tags = tags
 end
 
 function ToggleCircuitLogisiticBlocksVisibility(player, entity, elements)
@@ -743,16 +749,33 @@ function ConnectToLogisiticNetwork(connect)
 	end
 end
 
-function SetCircuitMode(player, circuitMode)
-	if g_SelectedEntity.type ~= 'pump' then
+function SetCircuitMode(player, entity, circuitMode)
+	if entity.type ~= 'pump' then
 		return
 	end
 
-	if global.pumps[g_SelectedEntity.unit_number][2] == circuitMode then
+	if global.pumps[entity.unit_number][2] == circuitMode then
 		return
 	end
 
-	global.pumps[g_SelectedEntity.unit_number][2] = circuitMode
+	global.pumps[entity.unit_number][2] = circuitMode
+
+	-- hack away circuit control behavior
+	-- which is enabled/disabled by default for pumps and cannot be changed
+	if IsConnectedToCircuitNetwork(entity) then
+		local behavior = entity.get_control_behavior()
+		if behavior then
+			if circuitMode == CircuitMode.EnableDisable then
+				behavior.circuit_condition = nil
+			else
+				behavior.circuit_condition = {condition={
+					comparator='=',
+					first_signal={type='item', name='red-wire'},
+					second_signal={type='item', name='red-wire'}
+				}}
+			end
+		end
+	end
 
 	player.print('Entity ' .. g_SelectedEntity.unit_number .. (circuitMode == CircuitMode.SetFilter and ' will' or ' will not') .. ' get its filter from circuit network')
 end
@@ -877,8 +900,9 @@ script.on_event(defines.events.on_gui_click, function(event)
 		end
 
 		local setFilterFromCircuit = elements.circuitMode.setFilterRadio.state
-		SetCircuitMode(player, circuitMode)
+		SetCircuitMode(player, g_SelectedEntity, circuitMode)
 		UpdateCircuit(g_SelectedEntity, circuitMode)
+		FillCircuitCondition(elements, g_SelectedEntity)
 		FillFilterButton(elements.chooseButton, g_SelectedEntity, circuitMode == CircuitMode.SetFilter)
 		ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
 	end

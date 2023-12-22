@@ -352,21 +352,6 @@ function GetFilterFromCircuitNetwork(pump)
 end
 
 function UpdateCircuit(pump, circuitMode)
-	if circuitMode == CircuitMode.None or circuitMode == CircuitMode.SetFilter then
-		if IsConnectedToCircuitNetwork(pump) then
-			-- hack away circuit control behavior
-			-- which is enabled/disabled by default and cannot be changed for pumps
-			local behavior = pump.get_control_behavior()
-			if behavior then
-				behavior.circuit_condition = {condition={
-					comparator='=',
-					first_signal={type='item', name='red-wire'},
-					second_signal={type='item', name='red-wire'}
-				}}
-			end
-		end
-	end
-
 	if circuitMode == CircuitMode.SetFilter then
 		local newFilter = GetFilterFromCircuitNetwork(pump)
 		local fb = pump.fluidbox
