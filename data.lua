@@ -60,6 +60,12 @@ styles.horizontal_filler = {
 	height = 24
 }
 
+styles.signal_search_field = {
+	type = "textbox_style",
+	parent = "titlebar_search_textfield",
+	width = styles["search_popup_textfield"].width,
+}
+
 styles.left_column = {
 	type = "vertical_flow_style",
 	minimal_width = styles["wide_entity_button"].minimal_width / 2,
@@ -96,3 +102,12 @@ data:extend{{
 	key_sequence = "",
 	linked_game_control = "open-gui"
 }}
+
+--[[
+data:extend{{
+	type = "custom-input",
+	name = "toggle_menu",
+	key_sequence = "",
+	linked_game_control = "toggle-menu"
+}}
+]]

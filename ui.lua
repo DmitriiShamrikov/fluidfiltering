@@ -16,8 +16,7 @@ local LOGISITIC_CONNECT_CHECKBOX_NAME = 'ui-logistic-connect'
 
 local SIGNAL_FRAME_NAME = 'ui-signal'
 local SIGNAL_SEARCH_BUTTON_NAME = 'ui-search'
-local SIGNAL_GROUP_NAME_PREFIX = 'ui-signal-group-'
-local SIGNAL_SIGNAL_NAME_PREFIX = 'ui-signal-signal-'
+local SIGNAL_SEARCH_FIELD_NAME = 'ui-search-field'
 local SIGNAL_CONSTANT_SLIDER_NAME = 'ui-signal-slider'
 local SIGNAL_CONSTANT_TEXT_NAME = 'ui-signal-text'
 local SIGNAL_SET_CONSTANT_BUTTON_NAME = 'ui-signal-set'
@@ -29,6 +28,9 @@ local SIGNALS_ROW_SIZE = 10
 
 local SIGNAL_VALUE_MIN = -2^31
 local SIGNAL_VALUE_MAX = 2^31 - 1
+
+local g_LocalizedSignalNames = {} -- {player-index => {localised-id => localized-name}}
+local g_LocalizationRequests = {}
 
 function SliderValueToConstantValue(svalue)
 	local order = math.floor(svalue / 10)
@@ -93,6 +95,18 @@ function IndexOf(array, value)
 		end
 	end
 	return nil
+end
+
+function GetSignalLocalizedString(signal)
+	local proto = nil
+	if signal.type == 'item' then
+		proto = game.item_prototypes[signal.name]
+	elseif signal.type == 'fluid' then
+		proto = game.fluid_prototypes[signal.name]
+	else
+		proto = game.virtual_signal_prototypes[signal.name]
+	end
+	return proto.localised_name
 end
 
 ----------------------------------------
@@ -256,6 +270,8 @@ function OpenEntityWindow(player, entity)
 	ToggleCircuitLogisiticBlocksVisibility(player, entity, elements)
 	
 	player.opened = entityFrame
+
+	RequestLocalizedSignalNames(player)
 end
 
 function FillFilterButton(chooseButton, entity, locked)
@@ -550,10 +566,11 @@ end
 
 function FetchSignalWindowElements(rootFrame)
 	local elements = {}
+	elements.searchField = FindElementByName(rootFrame, SIGNAL_SEARCH_FIELD_NAME)
 	elements.groupsTable = FindElementByName(rootFrame, 'groupsTable')
 	elements.scrollPane = FindElementByName(rootFrame, 'scrollPane')
 	elements.scrollFrame = FindElementByName(rootFrame, 'scrollFrame')
-	elements.constantSlider = FindElementByName(rootFrame, SIGNAL_CONSTANT_SLIDER_NAME)
+	elements.constantSlider = FindElementByName(rootFrame, SIGNAL_SEARCH_FIELD_NAME)
 	elements.constantText = FindElementByName(rootFrame, SIGNAL_CONSTANT_TEXT_NAME)
 	return elements
 end
@@ -563,13 +580,15 @@ function CreateSignalChooseWindow(player, elements)
 	signalFrame.auto_center = true
 	signalFrame.style.maximal_height = SIGNALS_FRAME_HEIGHT
 
-	local titleFlow = signalFrame.add{type='flow', direction='horizontal'}
+	local titleFlow = signalFrame.add{type='flow', direction='horizontal', style='centering_horizontal_flow'}
 	titleFlow.drag_target = signalFrame
 	titleFlow.style.horizontal_spacing = 8
 	titleFlow.add{type='label', caption={'gui.select-signal'}, ignored_by_interaction=true, style='frame_title'}
 	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler'}
-	
-	--[[
+
+	local searchField = titleFlow.add{type='textfield', name=SIGNAL_SEARCH_FIELD_NAME, style='signal_search_field'}
+	searchField.visible = false
+
 	titleFlow.add{
 		type='sprite-button',
 		name=SIGNAL_SEARCH_BUTTON_NAME,
@@ -580,7 +599,6 @@ function CreateSignalChooseWindow(player, elements)
 		clicked_sprite='utility/search_black',
 		auto_toggle=true
 	}
-	]]
 
 	titleFlow.add{
 		type='sprite-button',
@@ -623,13 +641,18 @@ function CreateSignalChooseWindow(player, elements)
 		signalsTable.style.height = signalTableHeight
 		for _, subgroupSignals in pairs(groupSignals) do
 			for _, signal in pairs(subgroupSignals) do
-				local signalButton = signalsTable.add{type='choose-elem-button', elem_type='signal', signal=signal, tags={type='signal'}, style='slot_button'}
+				local tags = {
+					type='signal',
+					loc_id=GetSignalLocalizedString(signal)[1]
+				}
+				local signalButton = signalsTable.add{type='choose-elem-button', elem_type='signal', signal=signal, tags=tags, style='slot_button'}
 				signalButton.locked = true
 			end
 			
 			local numEmptyWidgets = SIGNALS_ROW_SIZE - (#(subgroupSignals) % SIGNALS_ROW_SIZE)
-			for i = 1, numEmptyWidgets do
-				signalsTable.add{type='empty-widget'}
+			for i = 1, SIGNALS_ROW_SIZE do
+				local widget = signalsTable.add{type='empty-widget'}
+				widget.visible = i <= numEmptyWidgets
 			end
 		end
 	end
@@ -644,6 +667,7 @@ function CreateSignalChooseWindow(player, elements)
 	constantFlow.add{type='empty-widget', style='horizontal_filler'}
 	constantFlow.add{type='button', name=SIGNAL_SET_CONSTANT_BUTTON_NAME, caption={'gui.set'}, style='green_button'}
 
+	elements.searchField = searchField
 	elements.groupsTable = groupsTable
 	elements.scrollPane = scrollPane
 	elements.scrollFrame = scrollFrame
@@ -651,6 +675,58 @@ function CreateSignalChooseWindow(player, elements)
 	elements.constantText = constantText
 
 	return signalFrame
+end
+
+function FilterSignals(player, elements, pattern)
+	local groupsState = {}
+	for _, table in pairs(elements.scrollFrame.children) do
+		local hasSignalsInGroup = false
+		local numVisibleInSubgroup = 0
+
+		local numChildren = #(table.children)
+		local i = 1
+		while i <= numChildren do
+			local widget = table.children[i]
+			if widget.type == 'choose-elem-button' then
+				widget.visible = g_LocalizedSignalNames[player.index][widget.tags.loc_id]:find(pattern, 1, true) ~= nil
+				if widget.visible then
+					hasSignalsInGroup = true
+					numVisibleInSubgroup = numVisibleInSubgroup + 1
+				end
+				i = i + 1
+			else
+				local numEmptyWidgets = 0
+				if numVisibleInSubgroup > 0 then
+					numEmptyWidgets = SIGNALS_ROW_SIZE - (numVisibleInSubgroup % SIGNALS_ROW_SIZE)
+				end
+				for j = 0, SIGNALS_ROW_SIZE - 1 do
+					widget = table.children[i + j]
+					widget.visible = j < numEmptyWidgets
+				end
+
+				i = i + SIGNALS_ROW_SIZE
+				numVisibleInSubgroup = 0
+			end
+		end
+		groupsState[table.name] = hasSignalsInGroup
+	end
+
+	local toggledGroupDisabled = false
+	for _, button in pairs(elements.groupsTable.children) do
+		button.enabled = groupsState[button.name]
+		if button.toggled and not button.enabled then
+			toggledGroupDisabled = true
+		end
+	end
+
+	if toggledGroupDisabled then
+		for groupName, state in pairs(groupsState) do
+			if state then
+				SelectSignalGroup(elements, groupName)
+				break
+			end
+		end
+	end
 end
 
 function SelectSignalGroup(elements, groupName)
@@ -699,6 +775,27 @@ function CloseWindow(element)
 		element = element.parent
 	end
 	return name
+end
+
+function RequestLocalizedSignalNames(player)
+	if g_LocalizedSignalNames[player.index] ~= nil then
+		return
+	end
+
+	local strings = {}
+	local groups = GetSignalGroups()
+	for _, subgroups in pairs(groups) do
+		for _, subgroup in pairs(subgroups) do
+			for _, signal in pairs(subgroup) do
+				table.insert(strings, GetSignalLocalizedString(signal))
+			end
+		end
+	end
+
+	local ids = player.request_translations(strings)
+	for _, id in pairs(ids) do
+		g_LocalizationRequests[id] = true
+	end
 end
 
 ---------------------------------------
@@ -806,6 +903,12 @@ script.on_event('open_gui', function(event)
 	OnGuiOpened(event)
 end)
 
+--[[
+script.on_event('toggle_menu', function(event)
+	local player = game.get_player(event.player_index)
+end)
+]]
+
 script.on_event(defines.events.on_gui_click, function(event)
 	local player = game.get_player(event.player_index)
 	if player == nil or g_SelectedEntity == nil then
@@ -818,6 +921,17 @@ script.on_event(defines.events.on_gui_click, function(event)
 		SelectConstant(player, elements.constantText.text)
 		CloseWindow(event.element)
 		return
+	elseif event.element.name == SIGNAL_SEARCH_BUTTON_NAME then
+		local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+		elements.searchField.visible = event.element.toggled
+		if event.element.toggled then
+			elements.searchField:focus()
+		else
+			if elements.searchField.text ~= '' then
+				FilterSignals(player, elements, '')
+			end
+			elements.searchField.text = ''
+		end
 	elseif event.element.tags then
 		if event.element.tags.type == 'signal-group' then
 			local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
@@ -898,6 +1012,7 @@ script.on_event(defines.events.on_gui_click, function(event)
 	end
 end)
 
+-- choose-elem-button
 script.on_event(defines.events.on_gui_elem_changed, function(event)
 	local player = game.get_player(event.player_index)
 	if player == nil or g_SelectedEntity == nil then
@@ -911,6 +1026,7 @@ script.on_event(defines.events.on_gui_elem_changed, function(event)
 	end
 end)
 
+-- drop-down
 script.on_event(defines.events.on_gui_selection_state_changed, function(event)
 	local player = game.get_player(event.player_index)
 	if player == nil then
@@ -922,6 +1038,7 @@ script.on_event(defines.events.on_gui_selection_state_changed, function(event)
 	end
 end)
 
+-- textfield
 script.on_event(defines.events.on_gui_confirmed, function(event)
 	local player = game.get_player(event.player_index)
 	if player == nil then
@@ -932,9 +1049,15 @@ script.on_event(defines.events.on_gui_confirmed, function(event)
 		local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
 		SelectConstant(player, tonumber(elements.constantText.text))
 		CloseWindow(event.element)
+	elseif event.element.name == SIGNAL_SEARCH_FIELD_NAME then
+		if g_LocalizedSignalNames[player.index] ~= nil then
+			local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+			FilterSignals(player, elements, event.element.text:lower())
+		end
 	end
 end)
 
+-- slider
 script.on_event(defines.events.on_gui_value_changed, function(event)
 	local player = game.get_player(event.player_index)
 	if player == nil then
@@ -947,6 +1070,7 @@ script.on_event(defines.events.on_gui_value_changed, function(event)
 	end
 end)
 
+-- textfield
 script.on_event(defines.events.on_gui_text_changed, function(event)
 	local player = game.get_player(event.player_index)
 	if player == nil then
@@ -972,4 +1096,22 @@ script.on_event(defines.events.on_gui_closed, function(event)
 		event.element.destroy()
 		g_SelectedEntity = nil
 	end
+end)
+
+script.on_event(defines.events.on_string_translated, function(event)
+	if not event.translated then
+		game.get_player(event.player_index).print('Failed to translate "' .. serpent.block(event.localised_string) .. '"')
+		return
+	end
+
+	if not g_LocalizationRequests[event.id] then
+		return
+	end
+
+	g_LocalizationRequests[event.id] = nil
+
+	if g_LocalizedSignalNames[event.player_index] == nil then
+		g_LocalizedSignalNames[event.player_index] = {}
+	end
+	g_LocalizedSignalNames[event.player_index][event.localised_string[1]] = event.result:lower()
 end)
