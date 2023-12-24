@@ -15,6 +15,7 @@ local CHOOSE_LOGISTIC_SIGNAL2_FAKE_BUTTON_NAME = 'ui-logistic-signal-chooser-fak
 local LOGISITIC_CONNECT_CHECKBOX_NAME = 'ui-logistic-connect'
 
 local SIGNAL_FRAME_NAME = 'ui-signal'
+local SIGNAL_OVERLAY_NAME = 'ui-signal-overlay'
 local SIGNAL_SEARCH_BUTTON_NAME = 'ui-search'
 local SIGNAL_SEARCH_FIELD_NAME = 'ui-search-field'
 local SIGNAL_CONSTANT_SLIDER_NAME = 'ui-signal-slider'
@@ -576,6 +577,8 @@ function FetchSignalWindowElements(rootFrame)
 end
 
 function CreateSignalChooseWindow(player, elements)
+	player.gui.screen.add{type='button', name=SIGNAL_OVERLAY_NAME, style='signal_overlay'}
+
 	local signalFrame = player.gui.screen.add{type='frame', direction='vertical', name=SIGNAL_FRAME_NAME, style='inner_frame_in_outer_frame'}
 	signalFrame.auto_center = true
 	signalFrame.style.maximal_height = SIGNALS_FRAME_HEIGHT
@@ -764,17 +767,30 @@ function SelectConstant(player, value)
 	SetEnabledCondition(conditionElements.signal2FakeChooser, number)
 end
 
-function CloseWindow(element)
-	local name = nil
+function CloseWindow(player, element)
 	while element ~= nil do
 		if element.name == ENTITY_FRAME_NAME or element.name == SIGNAL_FRAME_NAME then
-			name = element.name
+			OnWindowClosed(player, element.name)
 			element.destroy()
 			break
 		end
 		element = element.parent
 	end
-	return name
+end
+
+function OnWindowClosed(player, name)
+	if name == ENTITY_FRAME_NAME then
+		if player.gui.screen[SIGNAL_FRAME_NAME] then
+			player.gui.screen[SIGNAL_FRAME_NAME].destroy()
+		end
+		g_SelectedEntity = nil
+	end
+
+	if name == ENTITY_FRAME_NAME or name == SIGNAL_FRAME_NAME then
+		if player.gui.screen[SIGNAL_OVERLAY_NAME] then
+			player.gui.screen[SIGNAL_OVERLAY_NAME].destroy()
+		end
+	end
 end
 
 function RequestLocalizedSignalNames(player)
@@ -919,7 +935,10 @@ script.on_event(defines.events.on_gui_click, function(event)
 	if event.element.name == SIGNAL_SET_CONSTANT_BUTTON_NAME then
 		local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
 		SelectConstant(player, elements.constantText.text)
-		CloseWindow(event.element)
+		CloseWindow(player, event.element)
+		return
+	elseif event.element.name == SIGNAL_OVERLAY_NAME then
+		CloseWindow(player, player.gui.screen[SIGNAL_FRAME_NAME])
 		return
 	elseif event.element.name == SIGNAL_SEARCH_BUTTON_NAME then
 		local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
@@ -939,7 +958,7 @@ script.on_event(defines.events.on_gui_click, function(event)
 		elseif event.element.tags.type == 'signal' then
 			local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
 			SelectSignal(elements, event.element.elem_value)
-			CloseWindow(event.element)
+			CloseWindow(player, event.element)
 			return
 		end
 	end
@@ -952,13 +971,8 @@ script.on_event(defines.events.on_gui_click, function(event)
 
 	---- Entity Window handling ----
 	if event.element.name == CLOSE_BUTTON_NAME then
-		local closedName = CloseWindow(event.element)
-		if closedName == ENTITY_FRAME_NAME then
-			if player.gui.screen[SIGNAL_FRAME_NAME] then
-				player.gui.screen[SIGNAL_FRAME_NAME].destroy()
-			end
-			g_SelectedEntity = nil
-		end
+		CloseWindow(player, event.element)
+		return
 	elseif event.element.name == CIRCUIT_BUTTON_NAME or event.element.name == LOGISTIC_BUTTON_NAME then
 		local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
 		if event.element.toggled then
@@ -1048,7 +1062,7 @@ script.on_event(defines.events.on_gui_confirmed, function(event)
 	if event.element.name == SIGNAL_CONSTANT_TEXT_NAME then
 		local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
 		SelectConstant(player, tonumber(elements.constantText.text))
-		CloseWindow(event.element)
+		CloseWindow(player, event.element)
 	elseif event.element.name == SIGNAL_SEARCH_FIELD_NAME then
 		if g_LocalizedSignalNames[player.index] ~= nil then
 			local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
@@ -1089,12 +1103,9 @@ script.on_event(defines.events.on_gui_closed, function(event)
 		return
 	end
 
-	if event.element and event.element.name == ENTITY_FRAME_NAME then
-		if player.gui.screen[SIGNAL_FRAME_NAME] then
-			player.gui.screen[SIGNAL_FRAME_NAME].destroy()
-		end
+	if event.element then
+		OnWindowClosed(player, event.element.name)
 		event.element.destroy()
-		g_SelectedEntity = nil
 	end
 end)
 

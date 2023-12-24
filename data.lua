@@ -88,6 +88,16 @@ styles.constant_button = {
 	maximal_width = 62,
 }
 
+styles.signal_overlay = {
+	type = "button_style",
+	default_graphical_set = {},
+	hovered_graphical_set = {},
+	clicked_graphical_set = {},
+	left_click_sound = {},
+	width = 4000,
+	height = 2400,
+}
+
 data:extend{{
 	type = "font",
 	name = "item-group",
