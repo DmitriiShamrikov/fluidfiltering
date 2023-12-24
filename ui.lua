@@ -1098,8 +1098,22 @@ script.on_event(defines.events.on_gui_closed, function(event)
 	end
 
 	if event.element then
-		OnWindowClosed(player, event.element.name)
-		event.element.destroy()
+		if player.gui.screen[SIGNAL_FRAME_NAME] then
+			local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+			if elements.searchField.visible then
+				elements.searchField.visible = false
+				if elements.searchField.text ~= '' then
+					FilterSignals(player, elements, '')
+				end
+				elements.searchField.text = ''
+			else
+				CloseWindow(player, player.gui.screen[SIGNAL_FRAME_NAME])
+			end
+			player.opened = event.element
+		else
+			OnWindowClosed(player, event.element.name)
+			event.element.destroy()
+		end
 	end
 end)
 
