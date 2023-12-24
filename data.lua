@@ -85,6 +85,10 @@ styles.constant_button = {
 	default_font_color = {1,1,1},
 	clicked_font_color = {1,1,1},
 	hovered_font_color = {1,1,1},
+	disabled_font_color = {1,1,1},
+	selected_font_color = {1,1,1},
+	selected_hovered_font_color = {1,1,1},
+	selected_clicked_font_color = {1,1,1},
 	maximal_width = 62,
 }
 
@@ -112,12 +116,3 @@ data:extend{{
 	key_sequence = "",
 	linked_game_control = "open-gui"
 }}
-
---[[
-data:extend{{
-	type = "custom-input",
-	name = "toggle_menu",
-	key_sequence = "",
-	linked_game_control = "toggle-menu"
-}}
-]]
