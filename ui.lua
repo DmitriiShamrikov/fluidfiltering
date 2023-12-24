@@ -7,10 +7,12 @@ local CHOOSE_FILTER_BUTTON_NAME = 'ui-liquid-filter-chooser'
 local CHOOSE_CIRCUIT_SIGNAL1_BUTTON_NAME = 'ui-circuit-signal1-chooser'
 local CHOOSE_CIRCUIT_COMPARATOR_BUTTON_NAME = 'ui-circuit-comparator-chooser'
 local CHOOSE_CIRCUIT_SIGNAL2_BUTTON_NAME = 'ui-circuit-signal2-chooser'
+local CHOOSE_CIRCUIT_SIGNAL2_FAKE_BUTTON_NAME = 'ui-circuit-signal2-choser-fake'
 local CHOOSE_CIRCUIT_SIGNAL2_CONSTANT_BUTTON_NAME = 'ui-circuit-signal-chooser-constant'
 local CHOOSE_LOGISTIC_SIGNAL1_BUTTON_NAME = 'ui-logistic-signal1-chooser'
 local CHOOSE_LOGISTIC_COMPARATOR_BUTTON_NAME = 'ui-logistic-comparator-chooser'
 local CHOOSE_LOGISTIC_SIGNAL2_BUTTON_NAME = 'ui-logistic-signal-chooser'
+local CHOOSE_LOGISTIC_SIGNAL2_FAKE_BUTTON_NAME = 'ui-logistic-signal2-choser-fake'
 local CHOOSE_LOGISTIC_SIGNAL2_CONSTANT_BUTTON_NAME = 'ui-logistic-signal-chooser-constant'
 local LOGISITIC_CONNECT_CHECKBOX_NAME = 'ui-logistic-connect'
 
@@ -308,9 +310,10 @@ function FillCondition(conditionElements, condition)
 	conditionElements.signal1Chooser.elem_value = condition.first_signal
 	conditionElements.comparatorList.selected_index = IndexOf(conditionElements.comparatorList.items, condition.comparator)
 	conditionElements.signal2Chooser.elem_value = condition.second_signal
-	conditionElements.signal2Chooser.visible = condition.second_signal ~= nil
-	conditionElements.signal2ConstantChooser.caption = condition.constant ~= nil and GetShortStringValue(condition.constant) or 0
-	conditionElements.signal2ConstantChooser.visible = not conditionElements.signal2Chooser.visible
+	conditionElements.signal2FakeChooser.sprite = condition.second_signal and (condition.second_signal.type .. '/' .. condition.second_signal.name) or nil
+	conditionElements.signal2ConstantChooser.caption = condition.constant ~= nil and GetShortStringValue(condition.constant) or ''
+	SelectSignal2Chooser(conditionElements, false)
+
 	local tags = conditionElements.signal2ConstantChooser.tags or {}
 	tags.value = condition.constant
 	conditionElements.signal2ConstantChooser.tags = tags
@@ -374,6 +377,7 @@ function FetchEntityWindowElements(entityFrame)
 	elements.circuitCondition.signal1Chooser = FindElementByName(entityFrame, CHOOSE_CIRCUIT_SIGNAL1_BUTTON_NAME)
 	elements.circuitCondition.comparatorList = FindElementByName(entityFrame, CHOOSE_CIRCUIT_COMPARATOR_BUTTON_NAME)
 	elements.circuitCondition.signal2Chooser = FindElementByName(entityFrame, CHOOSE_CIRCUIT_SIGNAL2_BUTTON_NAME)
+	elements.circuitCondition.signal2FakeChooser = FindElementByName(entityFrame, CHOOSE_CIRCUIT_SIGNAL2_FAKE_BUTTON_NAME)
 	elements.circuitCondition.signal2ConstantChooser = FindElementByName(entityFrame, CHOOSE_CIRCUIT_SIGNAL2_CONSTANT_BUTTON_NAME)
 
 	elements.logisticFlow = FindElementByName(entityFrame, 'logisticFlow')
@@ -386,6 +390,7 @@ function FetchEntityWindowElements(entityFrame)
 	elements.logisticCondition.signal1Chooser = FindElementByName(entityFrame, CHOOSE_LOGISTIC_SIGNAL1_BUTTON_NAME)
 	elements.logisticCondition.comparatorList = FindElementByName(entityFrame, CHOOSE_LOGISTIC_COMPARATOR_BUTTON_NAME)
 	elements.logisticCondition.signal2Chooser = FindElementByName(entityFrame, CHOOSE_LOGISTIC_SIGNAL2_BUTTON_NAME)
+	elements.logisticCondition.signal2FakeChooser = FindElementByName(entityFrame, CHOOSE_LOGISTIC_SIGNAL2_FAKE_BUTTON_NAME)
 	elements.logisticCondition.signal2ConstantChooser = FindElementByName(entityFrame, CHOOSE_LOGISTIC_SIGNAL2_CONSTANT_BUTTON_NAME)
 	return elements
 end
@@ -526,6 +531,10 @@ function CreateEnabledDisabledBlock(root, elements, isCircuit)
 	name = isCircuit and CHOOSE_CIRCUIT_SIGNAL2_BUTTON_NAME or CHOOSE_LOGISTIC_SIGNAL2_BUTTON_NAME
 	local rightChooser = conditionSelectorFlow.add{type='choose-elem-button', elem_type='signal', tags=tags, name=name, style='slot_button_in_shallow_frame'}
 	rightChooser.locked = true -- don't open default chooser window, we create our own
+	name = isCircuit and CHOOSE_CIRCUIT_SIGNAL2_FAKE_BUTTON_NAME or CHOOSE_LOGISTIC_SIGNAL2_FAKE_BUTTON_NAME
+	local fakeRightChooser = conditionSelectorFlow.add{type='sprite-button', tags=tags, name=name, style='slot_button_in_shallow_frame'}
+	fakeRightChooser.visible = false
+	fakeRightChooser.toggled = true
 	name = isCircuit and CHOOSE_CIRCUIT_SIGNAL2_CONSTANT_BUTTON_NAME or CHOOSE_LOGISTIC_SIGNAL2_CONSTANT_BUTTON_NAME
 	local constantChooser = conditionSelectorFlow.add{type='button', tags=tags, name=name, style='constant_button', tooltip={'gui.constant-number'}}
 	constantChooser.visible = false
@@ -535,6 +544,7 @@ function CreateEnabledDisabledBlock(root, elements, isCircuit)
 		signal1Chooser = leftChooser,
 		comparatorList = comparatorList,
 		signal2Chooser = rightChooser,
+		signal2FakeChooser = fakeRightChooser,
 		signal2ConstantChooser = constantChooser
 	}
 
@@ -745,9 +755,8 @@ end
 
 function SelectSignal(elements, signal)
 	local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
-	conditionElements.signal2Chooser.visible = true
 	conditionElements.signal2Chooser.elem_value = signal
-	conditionElements.signal2ConstantChooser.visible = false
+	conditionElements.signal2FakeChooser.sprite = signal and (signal.type .. '/' .. signal.name) or nil
 	conditionElements.signal2ConstantChooser.caption = ''
 	SetEnabledCondition(conditionElements.signal2Chooser, nil)
 end
@@ -756,14 +765,32 @@ function SelectConstant(player, value)
 	local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
 	local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
 	local number = tonumber(value)
-	conditionElements.signal2Chooser.visible = false
 	conditionElements.signal2Chooser.elem_value = nil
-	conditionElements.signal2ConstantChooser.visible = true
+	conditionElements.signal2FakeChooser.sprite = nil
 	conditionElements.signal2ConstantChooser.caption = GetShortStringValue(number)
 	local tags = conditionElements.signal2ConstantChooser.tags
 	tags.value = number
 	conditionElements.signal2ConstantChooser.tags = tags
 	SetEnabledCondition(conditionElements.signal2ConstantChooser, number)
+end
+
+function SelectSignal2Chooser(conditionElements, isSignalWindowOpened)
+	if conditionElements.signal2ConstantChooser.caption ~= '' then
+		conditionElements.signal2Chooser.visible = false
+		conditionElements.signal2FakeChooser.visible = false
+		conditionElements.signal2ConstantChooser.visible = true
+		conditionElements.signal2ConstantChooser.toggled = isSignalWindowOpened
+	else
+		if isSignalWindowOpened then
+			conditionElements.signal2Chooser.visible = false
+			conditionElements.signal2FakeChooser.visible = true
+			conditionElements.signal2ConstantChooser.visible = false
+		else
+			conditionElements.signal2Chooser.visible = true
+			conditionElements.signal2FakeChooser.visible = false
+			conditionElements.signal2ConstantChooser.visible = false
+		end
+	end
 end
 
 function CloseWindow(player, element)
@@ -783,6 +810,10 @@ function OnWindowClosed(player, name)
 			player.gui.screen[SIGNAL_FRAME_NAME].destroy()
 		end
 		g_SelectedEntity = nil
+	elseif name == SIGNAL_FRAME_NAME then
+		local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+		local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
+		SelectSignal2Chooser(conditionElements, false)
 	end
 
 	if name == ENTITY_FRAME_NAME or name == SIGNAL_FRAME_NAME then
@@ -992,6 +1023,10 @@ script.on_event(defines.events.on_gui_click, function(event)
 
 			SetEnabledCondition(event.element, nil)
 		else
+			local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+			local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
+			SelectSignal2Chooser(conditionElements, true)
+
 			local signal = event.element.type == 'choose-elem-button' and event.element.elem_value or nil
 			local constant = event.element.type == 'button' and event.element.tags.value or 0
 			OpenSignalChooseWindow(player, signal, constant)
