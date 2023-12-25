@@ -1,15 +1,6 @@
 require('debug')
 require('ui')
 
--- Unfortunately pumping from a fluid wagon doesn't seem working through fluidboxes
--- therefore fluidbox filter on a pump doesn't stop a pump to pump a wrong fluid from a wagon
--- As a workaround I run through all pumps and disable them if there is a fluid wagon
--- with a wrong fluid in front of them
--- Apart from that pumps have LuaGenericOnOffControlBehavior (which can't be changed)
--- that doesn't support filters like LuaInserterControlBehavior, so again, I have to manually
--- check every frame if a signal has changed and set corresponsing filter
-local PUMP_WAGON_CHECK_PERIOD = 1
-
 local g_SelectedEntity = nil
 local g_PumpConnectionsCache = {}
 local g_Signals = {} -- {group => {{SignalID},{SignalID}}}
@@ -387,7 +378,9 @@ end
 script.on_init(InitGlobal)
 script.on_configuration_changed(InitGlobal)
 
-script.on_nth_tick(PUMP_WAGON_CHECK_PERIOD, UpdatePumps)
+script.on_event(defines.events.on_tick, function(event)
+	UpdatePumps()
+end)
 
 local entityFilters = {{filter='type', type='pump'}}
 script.on_event(defines.events.on_built_entity, OnEntityBuilt, entityFilters)
