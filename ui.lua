@@ -644,12 +644,19 @@ function CreateSignalChooseWindow(player, elements)
 
 	for groupName, groupSignals in pairs(groups) do
 		local group = game.item_group_prototypes[groupName]
-		local button = groupsTable.add{type='sprite-button', name=group.name, tags={type='signal-group'}, tooltip={'item-group-name.'..group.name}, style='filter_group_button_tab'}
-		button.add{type='label', caption='[font=item-group][img=item-group/' .. group.name .. '][/font]'}
-		button.toggled = selectedGroupName == groupName
+		local isSelected = selectedGroupName == groupName
+		groupsTable.add{
+			type='sprite-button',
+			sprite='item-group/' .. group.name,
+			toggled=isSelected,
+			name=group.name,
+			tags={type='signal-group'},
+			tooltip={'item-group-name.'..group.name},
+			style='filter_group_button_tab'
+		}
 
 		local signalsTable = scrollFrame.add{type='table', name=group.name, column_count=SIGNALS_ROW_SIZE, style='filter_slot_table'}
-		signalsTable.visible = button.toggled
+		signalsTable.visible = isSelected
 		signalsTable.style.height = signalTableHeight
 		for _, subgroupSignals in pairs(groupSignals) do
 			for _, signal in pairs(subgroupSignals) do
