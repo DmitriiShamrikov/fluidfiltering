@@ -32,6 +32,7 @@ local SIGNALS_ROW_SIZE = 10
 local SIGNAL_VALUE_MIN = -2^31
 local SIGNAL_VALUE_MAX = 2^31 - 1
 
+local g_GuiElements = {} -- {player-index => {entityWindow={}, signalWindow={}}}
 local g_LocalizedSignalNames = {} -- {player-index => {localised-id => localized-name}}
 local g_LocalizationRequests = {}
 
@@ -132,7 +133,6 @@ function FindElementByName(root, name)
 end
 
 function OnGuiOpened(event)
-	g_SelectedEntity = nil
 	if event.gui_type ~= defines.gui_type.entity or event.entity == nil then
 		return
 	end
@@ -201,8 +201,9 @@ function OpenEntityWindow(player, entity)
 	local entityFrame = player.gui.screen[ENTITY_FRAME_NAME]
 	if entityFrame == nil then
 		entityFrame = CreateEntityWindow(player, elements)
+		g_GuiElements[player.index] = {entityWindow = elements}
 	else
-		elements = FetchEntityWindowElements(entityFrame)
+		elements = g_GuiElements[player.index].entityWindow
 	end
 
 	elements.title.caption = entity.localised_name
@@ -351,48 +352,6 @@ function ToggleCircuitLogisiticBlocksVisibility(player, entity, elements)
 		elements.circuitFlow.visible = false
 		elements.logisticFlow.visible = false
 	end
-end
-
-function FetchEntityWindowElements(entityFrame)
-	elements = {}
-	elements.title = FindElementByName(entityFrame, 'title')
-	elements.circuitButton = FindElementByName(entityFrame, CIRCUIT_BUTTON_NAME)
-	elements.logisticButton = FindElementByName(entityFrame, LOGISTIC_BUTTON_NAME)
-	elements.statusSprite = FindElementByName(entityFrame, 'statusSprite')
-	elements.statusText = FindElementByName(entityFrame, 'statusText')
-	elements.preview = FindElementByName(entityFrame, 'preview')
-	elements.chooseButton = FindElementByName(entityFrame, CHOOSE_FILTER_BUTTON_NAME)
-	elements.redNetworkId = FindElementByName(entityFrame, 'redNetworkId')
-	elements.greenNetworkId = FindElementByName(entityFrame, 'greenNetworkId')
-
-	elements.circuitFlow = FindElementByName(entityFrame, 'circuitFlow')
-	elements.circuitConnectionFlow = FindElementByName(entityFrame, 'circuitConnectionFlow')
-	elements.circuitInnerFlow = FindElementByName(entityFrame, 'circuitInnerFlow')
-	elements.circuitMode = {}
-	elements.circuitMode.noneRadio = FindElementByName(entityFrame, 'circuitModeNoneRadio')
-	elements.circuitMode.enableDisableRadio = FindElementByName(entityFrame, 'circuitModeEnableDisableRadio')
-	elements.circuitMode.setFilterRadio = FindElementByName(entityFrame, 'circuitModeSetFilterRadio')
-	elements.circuitCondition = {}
-	elements.circuitCondition.flow = FindElementByName(entityFrame, 'circuitEnableConditionFlow')
-	elements.circuitCondition.signal1Chooser = FindElementByName(entityFrame, CHOOSE_CIRCUIT_SIGNAL1_BUTTON_NAME)
-	elements.circuitCondition.comparatorList = FindElementByName(entityFrame, CHOOSE_CIRCUIT_COMPARATOR_BUTTON_NAME)
-	elements.circuitCondition.signal2Chooser = FindElementByName(entityFrame, CHOOSE_CIRCUIT_SIGNAL2_BUTTON_NAME)
-	elements.circuitCondition.signal2FakeChooser = FindElementByName(entityFrame, CHOOSE_CIRCUIT_SIGNAL2_FAKE_BUTTON_NAME)
-	elements.circuitCondition.signal2ConstantChooser = FindElementByName(entityFrame, CHOOSE_CIRCUIT_SIGNAL2_CONSTANT_BUTTON_NAME)
-
-	elements.logisticFlow = FindElementByName(entityFrame, 'logisticFlow')
-	elements.logisticConnectionFlow = FindElementByName(entityFrame, 'logisticConnectionFlow')
-	elements.logisticConnectedLabel = FindElementByName(entityFrame, 'logisticConnectedLabel')
-	elements.logisticConnectCheckbox = FindElementByName(entityFrame, LOGISITIC_CONNECT_CHECKBOX_NAME)
-	elements.logisticInnerFlow = FindElementByName(entityFrame, 'logisticInnerFlow')
-	elements.logisticCondition = {}
-	elements.logisticCondition.flow = FindElementByName(entityFrame, 'logisitcEnableConditionFlow')
-	elements.logisticCondition.signal1Chooser = FindElementByName(entityFrame, CHOOSE_LOGISTIC_SIGNAL1_BUTTON_NAME)
-	elements.logisticCondition.comparatorList = FindElementByName(entityFrame, CHOOSE_LOGISTIC_COMPARATOR_BUTTON_NAME)
-	elements.logisticCondition.signal2Chooser = FindElementByName(entityFrame, CHOOSE_LOGISTIC_SIGNAL2_BUTTON_NAME)
-	elements.logisticCondition.signal2FakeChooser = FindElementByName(entityFrame, CHOOSE_LOGISTIC_SIGNAL2_FAKE_BUTTON_NAME)
-	elements.logisticCondition.signal2ConstantChooser = FindElementByName(entityFrame, CHOOSE_LOGISTIC_SIGNAL2_CONSTANT_BUTTON_NAME)
-	return elements
 end
 
 function CreateEntityWindow(player, elements)
@@ -560,8 +519,9 @@ function OpenSignalChooseWindow(player, signal, constant)
 	local signalFrame = player.gui.screen[SIGNAL_FRAME_NAME]
 	if signalFrame == nil then
 		signalFrame = CreateSignalChooseWindow(player, elements)
+		g_GuiElements[player.index].signalWindow = elements
 	else
-		elements = FetchSignalWindowElements(signalFrame)
+		elements = g_GuiElements[player.index].signalWindow
 		signalFrame.bring_to_front()
 	end
 
@@ -572,17 +532,6 @@ function OpenSignalChooseWindow(player, signal, constant)
 
 	elements.constantText.text = tostring(constant)
 	elements.constantSlider.slider_value = ConstantValueToSliderValue(tostring(constant))
-end
-
-function FetchSignalWindowElements(rootFrame)
-	local elements = {}
-	elements.searchField = FindElementByName(rootFrame, SIGNAL_SEARCH_FIELD_NAME)
-	elements.groupsTable = FindElementByName(rootFrame, 'groupsTable')
-	elements.scrollPane = FindElementByName(rootFrame, 'scrollPane')
-	elements.scrollFrame = FindElementByName(rootFrame, 'scrollFrame')
-	elements.constantSlider = FindElementByName(rootFrame, SIGNAL_CONSTANT_SLIDER_NAME)
-	elements.constantText = FindElementByName(rootFrame, SIGNAL_CONSTANT_TEXT_NAME)
-	return elements
 end
 
 function CreateSignalChooseWindow(player, elements)
@@ -769,7 +718,7 @@ function SelectSignal(elements, signal)
 end
 
 function SelectConstant(player, value)
-	local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+	local elements = g_GuiElements[player.index].entityWindow
 	local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
 	local number = tonumber(value)
 	conditionElements.signal2Chooser.elem_value = nil
@@ -814,19 +763,21 @@ end
 function OnWindowClosed(player, name)
 	if name == ENTITY_FRAME_NAME then
 		if player.gui.screen[SIGNAL_FRAME_NAME] then
-			player.gui.screen[SIGNAL_FRAME_NAME].destroy()
+			CloseWindow(player, player.gui.screen[SIGNAL_FRAME_NAME])
 		end
 		g_SelectedEntity = nil
-	elseif name == SIGNAL_FRAME_NAME then
-		local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
-		local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
-		SelectSignal2Chooser(conditionElements, false)
-	end
 
-	if name == ENTITY_FRAME_NAME or name == SIGNAL_FRAME_NAME then
+		g_GuiElements[player.index].entityWindow = nil
+	elseif name == SIGNAL_FRAME_NAME then
 		if player.gui.screen[SIGNAL_OVERLAY_NAME] then
 			player.gui.screen[SIGNAL_OVERLAY_NAME].destroy()
 		end
+
+		local elements = g_GuiElements[player.index].entityWindow
+		local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
+		SelectSignal2Chooser(conditionElements, false)
+
+		g_GuiElements[player.index].signalWindow = nil
 	end
 end
 
@@ -964,7 +915,7 @@ script.on_event(defines.events.on_gui_click, function(event)
 
 	---- Signal Selection Window handling ----
 	if event.element.name == SIGNAL_SET_CONSTANT_BUTTON_NAME then
-		local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+		local elements = g_GuiElements[player.index].signalWindow
 		SelectConstant(player, elements.constantText.text)
 		CloseWindow(player, event.element)
 		return
@@ -972,7 +923,7 @@ script.on_event(defines.events.on_gui_click, function(event)
 		CloseWindow(player, player.gui.screen[SIGNAL_FRAME_NAME])
 		return
 	elseif event.element.name == SIGNAL_SEARCH_BUTTON_NAME then
-		local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+		local elements = g_GuiElements[player.index].signalWindow
 		elements.searchField.visible = event.element.toggled
 		if event.element.toggled then
 			elements.searchField:focus()
@@ -984,10 +935,10 @@ script.on_event(defines.events.on_gui_click, function(event)
 		end
 	elseif event.element.tags then
 		if event.element.tags.type == 'signal-group' then
-			local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+			local elements = g_GuiElements[player.index].signalWindow
 			SelectSignalGroup(elements, event.element.name)
 		elseif event.element.tags.type == 'signal' then
-			local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+			local elements = g_GuiElements[player.index].entityWindow
 			SelectSignal(elements, event.element.elem_value)
 			CloseWindow(player, event.element)
 			return
@@ -1005,7 +956,7 @@ script.on_event(defines.events.on_gui_click, function(event)
 		CloseWindow(player, event.element)
 		return
 	elseif event.element.name == CIRCUIT_BUTTON_NAME or event.element.name == LOGISTIC_BUTTON_NAME then
-		local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+		local elements = g_GuiElements[player.index].entityWindow
 		if event.element.toggled then
 			if event.element.name == CIRCUIT_BUTTON_NAME then
 				elements.logisticButton.toggled = false
@@ -1015,7 +966,7 @@ script.on_event(defines.events.on_gui_click, function(event)
 		end
 		ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
 	elseif event.element.name == LOGISITIC_CONNECT_CHECKBOX_NAME then
-		local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+		local elements = g_GuiElements[player.index].entityWindow
 		ConnectToLogisiticNetwork(event.element.state)
 		FillLogisticBlock(elements, g_SelectedEntity)
 		ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
@@ -1030,7 +981,7 @@ script.on_event(defines.events.on_gui_click, function(event)
 
 			SetEnabledCondition(event.element, nil)
 		else
-			local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+			local elements = g_GuiElements[player.index].entityWindow
 			local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
 			SelectSignal2Chooser(conditionElements, true)
 
@@ -1039,7 +990,7 @@ script.on_event(defines.events.on_gui_click, function(event)
 			OpenSignalChooseWindow(player, signal, constant)
 		end
 	elseif event.element.tags and event.element.tags.radiogroup == 'circuit' then
-		local elements = FetchEntityWindowElements(player.gui.screen[ENTITY_FRAME_NAME])
+		local elements = g_GuiElements[player.index].entityWindow
 		for _, radio in pairs(elements.circuitMode) do
 			if radio ~= event.element then
 				radio.state = false
@@ -1096,12 +1047,12 @@ script.on_event(defines.events.on_gui_confirmed, function(event)
 	end
 
 	if event.element.name == SIGNAL_CONSTANT_TEXT_NAME then
-		local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+		local elements = g_GuiElements[player.index].signalWindow
 		SelectConstant(player, tonumber(elements.constantText.text))
 		CloseWindow(player, event.element)
 	elseif event.element.name == SIGNAL_SEARCH_FIELD_NAME then
 		if g_LocalizedSignalNames[player.index] ~= nil then
-			local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+			local elements = g_GuiElements[player.index].signalWindow
 			FilterSignals(player, elements, event.element.text:lower())
 		end
 	end
@@ -1115,7 +1066,7 @@ script.on_event(defines.events.on_gui_value_changed, function(event)
 	end
 
 	if event.element.name == SIGNAL_CONSTANT_SLIDER_NAME then
-		local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+		local elements = g_GuiElements[player.index].signalWindow
 		elements.constantText.text = tostring(SliderValueToConstantValue(event.element.slider_value))
 	end
 end)
@@ -1128,7 +1079,7 @@ script.on_event(defines.events.on_gui_text_changed, function(event)
 	end
 
 	if event.element.name == SIGNAL_CONSTANT_TEXT_NAME then
-		local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+		local elements = g_GuiElements[player.index].signalWindow
 		elements.constantSlider.slider_value = ConstantValueToSliderValue(event.element.text)
 	end
 end)
@@ -1141,7 +1092,7 @@ script.on_event(defines.events.on_gui_closed, function(event)
 
 	if event.element then
 		if player.gui.screen[SIGNAL_FRAME_NAME] then
-			local elements = FetchSignalWindowElements(player.gui.screen[SIGNAL_FRAME_NAME])
+			local elements = g_GuiElements[player.index].signalWindow
 			if elements.searchField.visible then
 				elements.searchField.visible = false
 				if elements.searchField.text ~= '' then
