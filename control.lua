@@ -1,7 +1,6 @@
 require('debug')
 require('ui')
 
-local g_SelectedEntity = nil
 local g_PumpConnectionsCache = {}
 local g_Signals = {} -- {group => {{SignalID},{SignalID}}}
 

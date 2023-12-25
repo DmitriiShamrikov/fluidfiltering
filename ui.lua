@@ -32,6 +32,7 @@ local SIGNALS_ROW_SIZE = 10
 local SIGNAL_VALUE_MIN = -2^31
 local SIGNAL_VALUE_MAX = 2^31 - 1
 
+local g_OpenedEntity = {} -- {player-index => entity}
 local g_GuiElements = {} -- {player-index => {entityWindow={}, signalWindow={}}}
 local g_LocalizedSignalNames = {} -- {player-index => {localised-id => localized-name}}
 local g_LocalizationRequests = {}
@@ -152,7 +153,7 @@ function OnGuiOpened(event)
 			OpenEntityWindow(player, event.entity)
 		end
 
-		g_SelectedEntity = event.entity
+		g_OpenedEntity[player.index] = event.entity
 	end
 end
 
@@ -709,25 +710,23 @@ function SelectSignalGroup(elements, groupName)
 	elements.scrollPane.scroll_to_top()
 end
 
-function SelectSignal(elements, signal)
+function SelectSignal(entity, elements, signal)
 	local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
 	conditionElements.signal2Chooser.elem_value = signal
 	conditionElements.signal2FakeChooser.sprite = signal and (signal.type .. '/' .. signal.name) or nil
 	conditionElements.signal2ConstantChooser.caption = ''
-	SetEnabledCondition(conditionElements.signal2Chooser, nil)
+	SetEnabledCondition(entity, conditionElements.signal2Chooser, nil)
 end
 
-function SelectConstant(player, value)
-	local elements = g_GuiElements[player.index].entityWindow
+function SelectConstant(entity, elements, value)
 	local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
-	local number = tonumber(value)
 	conditionElements.signal2Chooser.elem_value = nil
 	conditionElements.signal2FakeChooser.sprite = nil
-	conditionElements.signal2ConstantChooser.caption = GetShortStringValue(number)
+	conditionElements.signal2ConstantChooser.caption = GetShortStringValue(value)
 	local tags = conditionElements.signal2ConstantChooser.tags
-	tags.value = number
+	tags.value = value
 	conditionElements.signal2ConstantChooser.tags = tags
-	SetEnabledCondition(conditionElements.signal2ConstantChooser, number)
+	SetEnabledCondition(entity, conditionElements.signal2ConstantChooser, value)
 end
 
 function SelectSignal2Chooser(conditionElements, isSignalWindowOpened)
@@ -765,7 +764,7 @@ function OnWindowClosed(player, name)
 		if player.gui.screen[SIGNAL_FRAME_NAME] then
 			CloseWindow(player, player.gui.screen[SIGNAL_FRAME_NAME])
 		end
-		g_SelectedEntity = nil
+		g_OpenedEntity[player.index] = nil
 
 		g_GuiElements[player.index].entityWindow = nil
 	elseif name == SIGNAL_FRAME_NAME then
@@ -825,14 +824,14 @@ function SetFilter(player, entity, fluid)
 	player.print('Setting filter for entity ' .. entity.unit_number .. ': ' .. (fluid or 'none'))
 end
 
-function ConnectToLogisiticNetwork(connect)
-	if g_SelectedEntity.type == 'pump' then
-		local behavior = g_SelectedEntity.get_control_behavior()
+function ConnectToLogisiticNetwork(entity, connect)
+	if entity.type == 'pump' then
+		local behavior = entity.get_control_behavior()
 		if not behavior then
 			if not connect then
 				return
 			end
-			behavior = g_SelectedEntity.get_or_create_control_behavior()
+			behavior = entity.get_or_create_control_behavior()
 		end
 		behavior.connect_to_logistic_network = connect
 	end
@@ -866,11 +865,11 @@ function SetCircuitMode(player, entity, circuitMode)
 		end
 	end
 
-	player.print('Entity ' .. g_SelectedEntity.unit_number .. (circuitMode == CircuitMode.SetFilter and ' will' or ' will not') .. ' get its filter from circuit network')
+	player.print('Entity ' .. entity.unit_number .. (circuitMode == CircuitMode.SetFilter and ' will' or ' will not') .. ' get its filter from circuit network')
 end
 
-function SetEnabledCondition(element, constantValue)
-	local behavior = g_SelectedEntity.get_or_create_control_behavior()
+function SetEnabledCondition(entity, element, constantValue)
+	local behavior = entity.get_or_create_control_behavior()
 	local condition = element.tags.is_circuit and behavior.circuit_condition.condition or behavior.logistic_condition.condition
 	if element.name == CHOOSE_CIRCUIT_SIGNAL1_BUTTON_NAME or element.name == CHOOSE_LOGISTIC_SIGNAL1_BUTTON_NAME then
 		condition.first_signal = element.elem_value
@@ -898,7 +897,7 @@ end
 script.on_event(defines.events.on_gui_opened, OnGuiOpened)
 script.on_event('open_gui', function(event)
 	local player = game.get_player(event.player_index)
-	if player == nil or player.selected == nil or player.selected == g_SelectedEntity or player.cursor_stack then
+	if player.selected == nil or player.selected == g_OpenedEntity[player.index] or player.cursor_stack then
 		return
 	end
 
@@ -909,14 +908,15 @@ end)
 
 script.on_event(defines.events.on_gui_click, function(event)
 	local player = game.get_player(event.player_index)
-	if player == nil or g_SelectedEntity == nil then
+	if g_OpenedEntity[player.index] == nil then
 		return
 	end
 
 	---- Signal Selection Window handling ----
 	if event.element.name == SIGNAL_SET_CONSTANT_BUTTON_NAME then
-		local elements = g_GuiElements[player.index].signalWindow
-		SelectConstant(player, elements.constantText.text)
+		local value = g_GuiElements[player.index].signalWindow.constantText.text
+		local elements = g_GuiElements[player.index].entityWindow
+		SelectConstant(g_OpenedEntity[player.index], elements, tonumber(value))
 		CloseWindow(player, event.element)
 		return
 	elseif event.element.name == SIGNAL_OVERLAY_NAME then
@@ -939,7 +939,7 @@ script.on_event(defines.events.on_gui_click, function(event)
 			SelectSignalGroup(elements, event.element.name)
 		elseif event.element.tags.type == 'signal' then
 			local elements = g_GuiElements[player.index].entityWindow
-			SelectSignal(elements, event.element.elem_value)
+			SelectSignal(g_OpenedEntity[player.index], elements, event.element.elem_value)
 			CloseWindow(player, event.element)
 			return
 		end
@@ -964,12 +964,12 @@ script.on_event(defines.events.on_gui_click, function(event)
 				elements.circuitButton.toggled = false
 			end
 		end
-		ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
+		ToggleCircuitLogisiticBlocksVisibility(player, g_OpenedEntity[player.index], elements)
 	elseif event.element.name == LOGISITIC_CONNECT_CHECKBOX_NAME then
 		local elements = g_GuiElements[player.index].entityWindow
-		ConnectToLogisiticNetwork(event.element.state)
-		FillLogisticBlock(elements, g_SelectedEntity)
-		ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
+		ConnectToLogisiticNetwork(g_OpenedEntity[player.index], event.element.state)
+		FillLogisticBlock(elements, g_OpenedEntity[player.index])
+		ToggleCircuitLogisiticBlocksVisibility(player, g_OpenedEntity[player.index], elements)
 	elseif event.element.name == CHOOSE_CIRCUIT_SIGNAL2_BUTTON_NAME or event.element.name == CHOOSE_CIRCUIT_SIGNAL2_CONSTANT_BUTTON_NAME or
 			event.element.name == CHOOSE_LOGISTIC_SIGNAL2_BUTTON_NAME or event.element.name == CHOOSE_LOGISTIC_SIGNAL2_CONSTANT_BUTTON_NAME then
 		if event.button == defines.mouse_button_type.right then
@@ -979,7 +979,7 @@ script.on_event(defines.events.on_gui_click, function(event)
 				event.element.caption = ''
 			end
 
-			SetEnabledCondition(event.element, nil)
+			SetEnabledCondition(g_OpenedEntity[player.index], event.element, nil)
 		else
 			local elements = g_GuiElements[player.index].entityWindow
 			local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
@@ -1005,50 +1005,51 @@ script.on_event(defines.events.on_gui_click, function(event)
 		end
 
 		local setFilterFromCircuit = elements.circuitMode.setFilterRadio.state
-		SetCircuitMode(player, g_SelectedEntity, circuitMode)
-		UpdateCircuit(g_SelectedEntity, circuitMode)
-		FillCondition(elements.circuitCondition, g_SelectedEntity.get_or_create_control_behavior().circuit_condition.condition)
-		FillFilterButton(elements.chooseButton, g_SelectedEntity, circuitMode == CircuitMode.SetFilter)
-		ToggleCircuitLogisiticBlocksVisibility(player, g_SelectedEntity, elements)
+		SetCircuitMode(player, g_OpenedEntity[player.index], circuitMode)
+		UpdateCircuit(g_OpenedEntity[player.index], circuitMode)
+		FillCondition(elements.circuitCondition, g_OpenedEntity[player.index].get_or_create_control_behavior().circuit_condition.condition)
+		FillFilterButton(elements.chooseButton, g_OpenedEntity[player.index], circuitMode == CircuitMode.SetFilter)
+		ToggleCircuitLogisiticBlocksVisibility(player, g_OpenedEntity[player.index], elements)
 	end
 end)
 
 -- choose-elem-button
 script.on_event(defines.events.on_gui_elem_changed, function(event)
 	local player = game.get_player(event.player_index)
-	if player == nil or g_SelectedEntity == nil then
+	if g_OpenedEntity[player.index] == nil then
 		return
 	end
 
 	if event.element.name == CHOOSE_FILTER_BUTTON_NAME then
-		SetFilter(player, g_SelectedEntity, event.element.elem_value)
+		SetFilter(player, g_OpenedEntity[player.index], event.element.elem_value)
 	elseif event.element.tags and event.element.tags.enable_disable then
-		SetEnabledCondition(event.element, nil)
+		SetEnabledCondition(g_OpenedEntity[player.index], event.element, nil)
 	end
 end)
 
 -- drop-down
 script.on_event(defines.events.on_gui_selection_state_changed, function(event)
 	local player = game.get_player(event.player_index)
-	if player == nil then
+	if g_OpenedEntity[player.index] == nil then
 		return
 	end
 
 	if event.element.tags and event.element.tags.enable_disable then
-		SetEnabledCondition(event.element, nil)
+		SetEnabledCondition(g_OpenedEntity[player.index], event.element, nil)
 	end
 end)
 
 -- textfield
 script.on_event(defines.events.on_gui_confirmed, function(event)
 	local player = game.get_player(event.player_index)
-	if player == nil then
+	if g_OpenedEntity[player.index] == nil then
 		return
 	end
 
 	if event.element.name == SIGNAL_CONSTANT_TEXT_NAME then
-		local elements = g_GuiElements[player.index].signalWindow
-		SelectConstant(player, tonumber(elements.constantText.text))
+		local value = g_GuiElements[player.index].signalWindow.constantText.text
+		local elements = g_GuiElements[player.index].entityWindow
+		SelectConstant(g_OpenedEntity[player.index], elements, tonumber(value))
 		CloseWindow(player, event.element)
 	elseif event.element.name == SIGNAL_SEARCH_FIELD_NAME then
 		if g_LocalizedSignalNames[player.index] ~= nil then
@@ -1061,7 +1062,7 @@ end)
 -- slider
 script.on_event(defines.events.on_gui_value_changed, function(event)
 	local player = game.get_player(event.player_index)
-	if player == nil then
+	if g_OpenedEntity[player.index] == nil then
 		return
 	end
 
@@ -1074,7 +1075,7 @@ end)
 -- textfield
 script.on_event(defines.events.on_gui_text_changed, function(event)
 	local player = game.get_player(event.player_index)
-	if player == nil then
+	if g_OpenedEntity[player.index] == nil then
 		return
 	end
 
@@ -1086,7 +1087,7 @@ end)
 
 script.on_event(defines.events.on_gui_closed, function(event)
 	local player = game.get_player(event.player_index)
-	if player == nil then
+	if g_OpenedEntity[player.index] == nil then
 		return
 	end
 
