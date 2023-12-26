@@ -364,7 +364,7 @@ function CreateEntityWindow(player, elements)
 	local titleFlow = mainFlow.add{type='flow', direction='horizontal'}
 	titleFlow.drag_target = entityFrame
 	titleFlow.style.horizontal_spacing = 8
-	elements.title = titleFlow.add{type='label', ignored_by_interaction=true, style='frame_title', name='title'}
+	elements.title = titleFlow.add{type='label', ignored_by_interaction=true, style='frame_title'}
 	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler'}
 
 	elements.circuitButton = titleFlow.add{
@@ -405,12 +405,12 @@ function CreateEntityWindow(player, elements)
 	statusFlow.style.vertical_align = 'center'
 	statusFlow.style.top_margin = -4
 	statusFlow.style.bottom_margin = 4
-	elements.statusSprite = statusFlow.add{type='sprite', name='statusSprite'}
-	elements.statusText = statusFlow.add{type='label', name='statusText'}
+	elements.statusSprite = statusFlow.add{type='sprite'}
+	elements.statusText = statusFlow.add{type='label'}
 
 	local previewContainer = contentFlow.add{type='frame', style='slot_container_frame'}
 	previewContainer.style.bottom_margin = 4
-	elements.preview = previewContainer.add{type='entity-preview', style='wide_entity_button', name='preview'}
+	elements.preview = previewContainer.add{type='entity-preview', style='wide_entity_button'}
 
 	local columnsFlow = contentFlow.add{type='flow', direction='horizontal'}
 	columnsFlow.style.top_margin = 4
@@ -427,18 +427,18 @@ function CreateEntityWindow(player, elements)
 end
 
 function CreateCircuitConditionBlock(root, elements)
-	local circuitFlow = root.add{type='flow', direction='vertical', name='circuitFlow'}
-	connectionFlow = circuitFlow.add{type='flow', direction='vertical', name='circuitConnectionFlow'}
+	local circuitFlow = root.add{type='flow', direction='vertical'}
+	connectionFlow = circuitFlow.add{type='flow', direction='vertical'}
 	connectionFlow.add{type='label', caption={'gui-control-behavior.not-connected'}}
 
-	local innerFlow = circuitFlow.add{type='flow', direction='vertical', name='circuitInnerFlow'}
-	elements.redNetworkId = innerFlow.add{type='label', name='redNetworkId'}
-	elements.greenNetworkId = innerFlow.add{type='label', name='greenNetworkId'}
+	local innerFlow = circuitFlow.add{type='flow', direction='vertical'}
+	elements.redNetworkId = innerFlow.add{type='label'}
+	elements.greenNetworkId = innerFlow.add{type='label'}
 	innerFlow.add{type='line', direction='horizontal'}
 	innerFlow.add{type='label', caption={'gui-control-behavior.mode-of-operation'}, style='caption_label'}
-	local noneRadio = innerFlow.add{type='radiobutton', tags={radiogroup='circuit'}, caption={'gui-control-behavior-modes.none'}, tooltip={'gui-control-behavior-modes.none-write-description'}, state=true, name='circuitModeNoneRadio'}
-	local enDisRadio = innerFlow.add{type='radiobutton', tags={radiogroup='circuit'}, caption={'gui-control-behavior-modes.enable-disable'}, tooltip={'gui-control-behavior-modes.enable-disable-description'}, state=false, name='circuitModeEnableDisableRadio'}
-	local setFilterRadio = innerFlow.add{type='radiobutton', tags={radiogroup='circuit'}, caption={'gui-control-behavior-modes.set-filters'}, tooltip={'gui-control-behavior-modes.set-filters-description'}, state=false, name='circuitModeSetFilterRadio'}
+	local noneRadio = innerFlow.add{type='radiobutton', tags={radiogroup='circuit'}, caption={'gui-control-behavior-modes.none'}, tooltip={'gui-control-behavior-modes.none-write-description'}, state=true}
+	local enDisRadio = innerFlow.add{type='radiobutton', tags={radiogroup='circuit'}, caption={'gui-control-behavior-modes.enable-disable'}, tooltip={'gui-control-behavior-modes.enable-disable-description'}, state=false}
+	local setFilterRadio = innerFlow.add{type='radiobutton', tags={radiogroup='circuit'}, caption={'gui-control-behavior-modes.set-filters'}, tooltip={'gui-control-behavior-modes.set-filters-description'}, state=false}
 	--innerFlow.add{type='checkbox', caption={'gui-control-behavior-modes.read-contents'}, tooltip={'gui-control-behavior-modes.read-contents-description'}, state=false}
 	
 	elements.circuitFlow = circuitFlow
@@ -453,12 +453,12 @@ function CreateCircuitConditionBlock(root, elements)
 end
 
 function CreateLogisticConditionBlock(root, elements)
-	local logisticFlow = root.add{type='flow', direction='vertical', name='logisticFlow'}
-	local connectionFlow = logisticFlow.add{type='flow', direction='vertical', name='logisticConnectionFlow'}
-	local connectedLabel = connectionFlow.add{type='label', caption={'gui-control-behavior.not-connected'}, name='logisticConnectedLabel'}
+	local logisticFlow = root.add{type='flow', direction='vertical'}
+	local connectionFlow = logisticFlow.add{type='flow', direction='vertical'}
+	local connectedLabel = connectionFlow.add{type='label', caption={'gui-control-behavior.not-connected'}}
 	local connectChbx = connectionFlow.add{type='checkbox', caption={'gui-control-behavior.connect'}, state=false, name=LOGISITIC_CONNECT_CHECKBOX_NAME}
 
-	local innerFlow = logisticFlow.add{type='flow', direction='vertical', name='logisticInnerFlow'}
+	local innerFlow = logisticFlow.add{type='flow', direction='vertical'}
 	innerFlow.add{type='line', direction='horizontal'}
 	innerFlow.add{type='label', caption={'gui-control-behavior.mode-of-operation'}, style='caption_label'}
 	innerFlow.add{type='radiobutton', tags={radiogroup='logistic'}, caption={'gui-control-behavior-modes.enable-disable'}, tooltip={'gui-control-behavior-modes.enable-disable-description'}, state=true}
@@ -515,7 +515,7 @@ function CreateEnabledDisabledBlock(root, elements, isCircuit)
 	end
 end
 
-function OpenSignalChooseWindow(player, signal, constant)
+function OpenSignalChooseWindow(player, signal, constant, clickPos)
 	local elements = {}
 	local signalFrame = player.gui.screen[SIGNAL_FRAME_NAME]
 	if signalFrame == nil then
@@ -533,13 +533,17 @@ function OpenSignalChooseWindow(player, signal, constant)
 
 	elements.constantText.text = tostring(constant)
 	elements.constantSlider.slider_value = ConstantValueToSliderValue(tostring(constant))
+
+	local posX = math.min(clickPos.x, player.display_resolution.width - signalFrame.tags.size.x)
+	local posY = math.min(clickPos.y, player.display_resolution.height - signalFrame.tags.size.y)
+	
+	signalFrame.location = {x=posX, y=posY}
 end
 
 function CreateSignalChooseWindow(player, elements)
 	player.gui.screen.add{type='button', name=SIGNAL_OVERLAY_NAME, style='signal_overlay'}
 
 	local signalFrame = player.gui.screen.add{type='frame', direction='vertical', name=SIGNAL_FRAME_NAME, style='inner_frame_in_outer_frame'}
-	signalFrame.auto_center = true
 	signalFrame.style.maximal_height = SIGNALS_FRAME_HEIGHT
 
 	local titleFlow = signalFrame.add{type='flow', direction='horizontal', style='centering_horizontal_flow'}
@@ -573,11 +577,11 @@ function CreateSignalChooseWindow(player, elements)
 
 	local contentFrame = signalFrame.add{type='frame', direction='vertical', style='crafting_frame'}
 
-	local groupsTable = contentFrame.add{type='table', name='groupsTable', column_count=SIGNALS_GROUP_ROW_SIZE, style='filter_group_table'}
+	local groupsTable = contentFrame.add{type='table', column_count=SIGNALS_GROUP_ROW_SIZE, style='filter_group_table'}
 	
 	local wrapperFrame = contentFrame.add{type='frame', style='filter_frame'}
-	local scrollPane = wrapperFrame.add{type='scroll-pane', name='scrollPane', vertical_scroll_policy='always', horizontal_scroll_policy='never', style='filter_scroll_pane_in_tab'}
-	local scrollFrame = scrollPane.add{type='frame', direction='vertical', name='scrollFrame', style='filter_scroll_pane_background_frame'}
+	local scrollPane = wrapperFrame.add{type='scroll-pane', vertical_scroll_policy='always', horizontal_scroll_policy='never', style='filter_scroll_pane_in_tab'}
+	local scrollFrame = scrollPane.add{type='frame', direction='vertical', style='filter_scroll_pane_background_frame'}
 
 	local groups = GetSignalGroups()
 	local selectedGroupName, _ = next(groups)
@@ -642,6 +646,33 @@ function CreateSignalChooseWindow(player, elements)
 	elements.scrollFrame = scrollFrame
 	elements.constantSlider = constantSlider
 	elements.constantText = constantText
+
+	local frameHight =
+		8 +  -- frame.top_padding (it's 4 in the style...)
+		28 + -- titleFlow (button.minimal_height or probably label height)
+		72 * math.ceil(#(elements.groupsTable.children) / SIGNALS_GROUP_ROW_SIZE) + -- filter_group_button_tab.size
+		6 +  -- filter_frame.top_padding
+		4 +  -- filter_scroll_pane.top_padding
+		signalTableHeight +
+		4 +  -- filter_scroll_pane.bottom_padding
+		4 +  -- filter_frame.bottom_padding
+		12 + -- WTF
+		12 + -- inside_shallow_frame_with_padding.padding
+		28 + -- label height
+		28 + -- textbox.minimal_height or button.minimal_height
+		12 + -- inside_shallow_frame_with_padding.padding
+		12   -- frame.bottom_padding (it's 8 in the style...)
+	frameHight = math.min(frameHight, SIGNALS_FRAME_HEIGHT)
+
+	local frameWidth =
+		12 +  -- frame.left_padding (it's 8 in the style...)
+		71 * SIGNALS_GROUP_ROW_SIZE + -- filter_group_button_tab.size
+		12    -- frame.right_padding (it's 8 in the style...)
+
+	signalFrame.tags = {size={
+		x=math.floor(frameWidth * player.display_scale),
+		y=math.floor(frameHight * player.display_scale)
+	}}
 
 	return signalFrame
 end
@@ -987,7 +1018,7 @@ script.on_event(defines.events.on_gui_click, function(event)
 
 			local signal = event.element.type == 'choose-elem-button' and event.element.elem_value or nil
 			local constant = event.element.type == 'button' and event.element.tags.value or 0
-			OpenSignalChooseWindow(player, signal, constant)
+			OpenSignalChooseWindow(player, signal, constant, event.cursor_display_location)
 		end
 	elseif event.element.tags and event.element.tags.radiogroup == 'circuit' then
 		local elements = g_GuiElements[player.index].entityWindow
