@@ -515,11 +515,11 @@ function CreateEnabledDisabledBlock(root, elements, isCircuit)
 	end
 end
 
-function OpenSignalChooseWindow(player, signal, constant, clickPos)
+function OpenSignalChooseWindow(player, signal, constant, includeSpecialSignals, clickPos)
 	local elements = {}
 	local signalFrame = player.gui.screen[SIGNAL_FRAME_NAME]
 	if signalFrame == nil then
-		signalFrame = CreateSignalChooseWindow(player, elements)
+		signalFrame = CreateSignalChooseWindow(player, elements, includeSpecialSignals)
 		g_GuiElements[player.index].signalWindow = elements
 	else
 		elements = g_GuiElements[player.index].signalWindow
@@ -540,7 +540,7 @@ function OpenSignalChooseWindow(player, signal, constant, clickPos)
 	signalFrame.location = {x=posX, y=posY}
 end
 
-function CreateSignalChooseWindow(player, elements)
+function CreateSignalChooseWindow(player, elements, includeSpecialSignals)
 	player.gui.screen.add{type='button', name=SIGNAL_OVERLAY_NAME, style='signal_overlay'}
 
 	local signalFrame = player.gui.screen.add{type='frame', direction='vertical', name=SIGNAL_FRAME_NAME, style='inner_frame_in_outer_frame'}
@@ -613,19 +613,25 @@ function CreateSignalChooseWindow(player, elements)
 		signalsTable.visible = isSelected
 		signalsTable.style.height = signalTableHeight
 		for _, subgroupSignals in pairs(groupSignals) do
+			local numSignalsInSubgroup = 0
 			for _, signal in pairs(subgroupSignals) do
-				local tags = {
-					type='signal',
-					loc_id=GetSignalLocalizedString(signal)[1]
-				}
-				local signalButton = signalsTable.add{type='choose-elem-button', elem_type='signal', signal=signal, tags=tags, style='slot_button'}
-				signalButton.locked = true
+				if not signal.special or includeSpecialSignals then
+					numSignalsInSubgroup = numSignalsInSubgroup + 1
+					local tags = {
+						type='signal',
+						loc_id=GetSignalLocalizedString(signal)[1]
+					}
+					local signalButton = signalsTable.add{type='choose-elem-button', elem_type='signal', signal=signal, tags=tags, style='slot_button'}
+					signalButton.locked = true
+				end
 			end
-			
-			local numEmptyWidgets = SIGNALS_ROW_SIZE - (#(subgroupSignals) % SIGNALS_ROW_SIZE)
-			for i = 1, SIGNALS_ROW_SIZE do
-				local widget = signalsTable.add{type='empty-widget'}
-				widget.visible = i <= numEmptyWidgets
+
+			if numSignalsInSubgroup > 0 then
+				local numEmptyWidgets = SIGNALS_ROW_SIZE - (numSignalsInSubgroup % SIGNALS_ROW_SIZE)
+				for i = 1, SIGNALS_ROW_SIZE do
+					local widget = signalsTable.add{type='empty-widget'}
+					widget.visible = i <= numEmptyWidgets
+				end
 			end
 		end
 	end
@@ -1018,7 +1024,7 @@ script.on_event(defines.events.on_gui_click, function(event)
 
 			local signal = event.element.type == 'choose-elem-button' and event.element.elem_value or nil
 			local constant = event.element.type == 'button' and event.element.tags.value or 0
-			OpenSignalChooseWindow(player, signal, constant, event.cursor_display_location)
+			OpenSignalChooseWindow(player, signal, constant, false, event.cursor_display_location)
 		end
 	elseif event.element.tags and event.element.tags.radiogroup == 'circuit' then
 		local elements = g_GuiElements[player.index].entityWindow

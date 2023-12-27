@@ -49,8 +49,8 @@ function GetSignalGroups()
 	
 				local subsignals = {}
 				for _, vsignal in pairs(game.virtual_signal_prototypes) do
-					if vsignal.subgroup.name == subgroup.name then
-						table.insert(subsignals, {type='virtual', name=vsignal.name})
+					if vsignal.name ~= 'signal-each' and vsignal.subgroup.name == subgroup.name then
+						table.insert(subsignals, {type='virtual', name=vsignal.name, special=vsignal.special})
 					end
 				end
 				if #(subsignals) > 0 then
