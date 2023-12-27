@@ -5,11 +5,13 @@ local CIRCUIT_BUTTON_NAME = 'ui-circuit'
 local LOGISTIC_BUTTON_NAME = 'ui-logistic'
 local CHOOSE_FILTER_BUTTON_NAME = 'ui-liquid-filter-chooser'
 local CHOOSE_CIRCUIT_SIGNAL1_BUTTON_NAME = 'ui-circuit-signal1-chooser'
+local CHOOSE_CIRCUIT_SIGNAL1_FAKE_BUTTON_NAME = 'ui-circuit-signal1-choser-fake'
 local CHOOSE_CIRCUIT_COMPARATOR_BUTTON_NAME = 'ui-circuit-comparator-chooser'
 local CHOOSE_CIRCUIT_SIGNAL2_BUTTON_NAME = 'ui-circuit-signal2-chooser'
 local CHOOSE_CIRCUIT_SIGNAL2_FAKE_BUTTON_NAME = 'ui-circuit-signal2-choser-fake'
 local CHOOSE_CIRCUIT_SIGNAL2_CONSTANT_BUTTON_NAME = 'ui-circuit-signal-chooser-constant'
 local CHOOSE_LOGISTIC_SIGNAL1_BUTTON_NAME = 'ui-logistic-signal1-chooser'
+local CHOOSE_LOGISTIC_SIGNAL1_FAKE_BUTTON_NAME = 'ui-logistic-signal1-choser-fake'
 local CHOOSE_LOGISTIC_COMPARATOR_BUTTON_NAME = 'ui-logistic-comparator-chooser'
 local CHOOSE_LOGISTIC_SIGNAL2_BUTTON_NAME = 'ui-logistic-signal-chooser'
 local CHOOSE_LOGISTIC_SIGNAL2_FAKE_BUTTON_NAME = 'ui-logistic-signal2-choser-fake'
@@ -112,6 +114,14 @@ function GetSignalLocalizedString(signal)
 		proto = game.virtual_signal_prototypes[signal.name]
 	end
 	return proto.localised_name
+end
+
+function GetSpritePath(signal)
+	if signal and signal.type and signal.name then
+		return (signal.type == 'virtual' and 'virtual-signal' or signal.type) .. '/' .. signal.name
+	else
+		return nil
+	end
 end
 
 ----------------------------------------
@@ -310,10 +320,12 @@ end
 
 function FillCondition(conditionElements, condition)
 	conditionElements.signal1Chooser.elem_value = condition.first_signal
+	conditionElements.signal1FakeChooser.sprite = GetSpritePath(condition.first_signal)
 	conditionElements.comparatorList.selected_index = IndexOf(conditionElements.comparatorList.items, condition.comparator)
 	conditionElements.signal2Chooser.elem_value = condition.second_signal
-	conditionElements.signal2FakeChooser.sprite = condition.second_signal and (condition.second_signal.type .. '/' .. condition.second_signal.name) or nil
+	conditionElements.signal2FakeChooser.sprite = GetSpritePath(condition.second_signal)
 	conditionElements.signal2ConstantChooser.caption = condition.constant ~= nil and GetShortStringValue(condition.constant) or ''
+	SelectSignal1Chooser(conditionElements, false)
 	SelectSignal2Chooser(conditionElements, false)
 
 	local tags = conditionElements.signal2ConstantChooser.tags or {}
@@ -486,8 +498,15 @@ function CreateEnabledDisabledBlock(root, elements, isCircuit)
 
 	name = isCircuit and CHOOSE_CIRCUIT_SIGNAL1_BUTTON_NAME or CHOOSE_LOGISTIC_SIGNAL1_BUTTON_NAME
 	local leftChooser = conditionSelectorFlow.add{type='choose-elem-button', elem_type='signal', tags=tags, name=name, style='slot_button_in_shallow_frame'}
+	leftChooser.locked = true -- don't open default chooser window, we create our own
+	name = isCircuit and CHOOSE_CIRCUIT_SIGNAL1_FAKE_BUTTON_NAME or CHOOSE_LOGISTIC_SIGNAL1_FAKE_BUTTON_NAME
+	local fakeLeftChooser = conditionSelectorFlow.add{type='sprite-button', tags=tags, name=name, style='slot_button_in_shallow_frame'}
+	fakeLeftChooser.visible = false
+	fakeLeftChooser.toggled = true
+
 	name = isCircuit and CHOOSE_CIRCUIT_COMPARATOR_BUTTON_NAME or CHOOSE_LOGISTIC_COMPARATOR_BUTTON_NAME
 	local comparatorList = conditionSelectorFlow.add{type='drop-down', items={'>', '<', '=', '≥', '≤', '≠'}, selected_index=2, tags=tags, name=name, style='circuit_condition_comparator_dropdown'}
+
 	name = isCircuit and CHOOSE_CIRCUIT_SIGNAL2_BUTTON_NAME or CHOOSE_LOGISTIC_SIGNAL2_BUTTON_NAME
 	local rightChooser = conditionSelectorFlow.add{type='choose-elem-button', elem_type='signal', tags=tags, name=name, style='slot_button_in_shallow_frame'}
 	rightChooser.locked = true -- don't open default chooser window, we create our own
@@ -502,6 +521,7 @@ function CreateEnabledDisabledBlock(root, elements, isCircuit)
 	local flowElements = {
 		flow = conditionFlow,
 		signal1Chooser = leftChooser,
+		signal1FakeChooser = fakeLeftChooser,
 		comparatorList = comparatorList,
 		signal2Chooser = rightChooser,
 		signal2FakeChooser = fakeRightChooser,
@@ -531,8 +551,15 @@ function OpenSignalChooseWindow(player, signal, constant, includeSpecialSignals,
 		SelectSignalGroup(elements, signalGroup)
 	end
 
-	elements.constantText.text = tostring(constant)
-	elements.constantSlider.slider_value = ConstantValueToSliderValue(tostring(constant))
+	if constant ~= nil then
+		elements.constantFrame.visible = true
+		elements.constantText.text = tostring(constant)
+		elements.constantSlider.slider_value = ConstantValueToSliderValue(tostring(constant))
+	else
+		elements.constantFrame.visible = false
+		elements.constantText.text = ''
+		elements.constantSlider.slider_value = 0
+	end
 
 	local posX = math.min(clickPos.x, player.display_resolution.width - signalFrame.tags.size.x)
 	local posY = math.min(clickPos.y, player.display_resolution.height - signalFrame.tags.size.y)
@@ -646,6 +673,7 @@ function CreateSignalChooseWindow(player, elements, includeSpecialSignals)
 	constantFlow.add{type='empty-widget', style='horizontal_filler'}
 	constantFlow.add{type='button', name=SIGNAL_SET_CONSTANT_BUTTON_NAME, caption={'gui.set'}, style='green_button'}
 
+	elements.constantFrame = constantFrame
 	elements.searchField = searchField
 	elements.groupsTable = groupsTable
 	elements.scrollPane = scrollPane
@@ -749,10 +777,16 @@ end
 
 function SelectSignal(entity, elements, signal)
 	local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
-	conditionElements.signal2Chooser.elem_value = signal
-	conditionElements.signal2FakeChooser.sprite = signal and (signal.type .. '/' .. signal.name) or nil
-	conditionElements.signal2ConstantChooser.caption = ''
-	SetEnabledCondition(entity, conditionElements.signal2Chooser, nil)
+	if conditionElements.signal1FakeChooser.visible then
+		conditionElements.signal1Chooser.elem_value = signal
+		conditionElements.signal1FakeChooser.sprite = GetSpritePath(signal)
+		SetEnabledCondition(entity, conditionElements.signal1Chooser, nil)
+	else
+		conditionElements.signal2Chooser.elem_value = signal
+		conditionElements.signal2FakeChooser.sprite = GetSpritePath(signal)
+		conditionElements.signal2ConstantChooser.caption = ''
+		SetEnabledCondition(entity, conditionElements.signal2Chooser, nil)
+	end
 end
 
 function SelectConstant(entity, elements, value)
@@ -764,6 +798,11 @@ function SelectConstant(entity, elements, value)
 	tags.value = value
 	conditionElements.signal2ConstantChooser.tags = tags
 	SetEnabledCondition(entity, conditionElements.signal2ConstantChooser, value)
+end
+
+function SelectSignal1Chooser(conditionElements, isSignalWindowOpened)
+	conditionElements.signal1Chooser.visible = not isSignalWindowOpened
+	conditionElements.signal1FakeChooser.visible = isSignalWindowOpened
 end
 
 function SelectSignal2Chooser(conditionElements, isSignalWindowOpened)
@@ -811,6 +850,7 @@ function OnWindowClosed(player, name)
 
 		local elements = g_GuiElements[player.index].entityWindow
 		local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
+		SelectSignal1Chooser(conditionElements, false)
 		SelectSignal2Chooser(conditionElements, false)
 
 		g_GuiElements[player.index].signalWindow = nil
@@ -1026,6 +1066,18 @@ script.on_event(defines.events.on_gui_click, function(event)
 			local constant = event.element.type == 'button' and event.element.tags.value or 0
 			OpenSignalChooseWindow(player, signal, constant, false, event.cursor_display_location)
 		end
+	elseif event.element.name == CHOOSE_CIRCUIT_SIGNAL1_BUTTON_NAME or event.element.name == CHOOSE_LOGISTIC_SIGNAL1_BUTTON_NAME then
+		if event.button == defines.mouse_button_type.right then
+			event.element.elem_value = nil
+			SetEnabledCondition(g_OpenedEntity[player.index], event.element, nil)
+		else
+			local elements = g_GuiElements[player.index].entityWindow
+			local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
+			SelectSignal1Chooser(conditionElements, true)
+
+			local signal = event.element.type == 'choose-elem-button' and event.element.elem_value or nil
+			OpenSignalChooseWindow(player, signal, nil, true, event.cursor_display_location)
+		end
 	elseif event.element.tags and event.element.tags.radiogroup == 'circuit' then
 		local elements = g_GuiElements[player.index].entityWindow
 		for _, radio in pairs(elements.circuitMode) do
@@ -1059,8 +1111,6 @@ script.on_event(defines.events.on_gui_elem_changed, function(event)
 
 	if event.element.name == CHOOSE_FILTER_BUTTON_NAME then
 		SetFilter(player, g_OpenedEntity[player.index], event.element.elem_value)
-	elseif event.element.tags and event.element.tags.enable_disable then
-		SetEnabledCondition(g_OpenedEntity[player.index], event.element, nil)
 	end
 end)
 
