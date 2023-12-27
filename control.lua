@@ -11,8 +11,8 @@ CircuitMode =
 	SetFilter = 2
 }
 
--- global.pumps - array of entries, each entry is a pair of entity and a CircuitMode
--- global.wagons - array of entries, each entry is a pair of entity and a filter (string)
+-- global.pumps - {{entity, CircuitMode}, ...}
+-- global.wagons - {{entity, filter (string)}}
 
 function GetSignalGroups()
 	if #(g_Signals) == 0 then
@@ -370,6 +370,20 @@ function UpdatePumps()
 			local pump = entry[1]
 			UpdateCircuit(pump, entry[2])
 			UpdateState(pump)
+
+			local openedEntityState = g_OpenedEntities[pump.unit_number]
+			if openedEntityState and (openedEntityState.active ~= pump.active or openedEntityState.status ~= pump.status) then
+				local event = {
+					entity = pump,
+					--prevStatus = openedEntityState.status,
+					--wasActive = openedEntityState.active,
+				}
+
+				script.raise_event(ON_ENTITY_STATE_CHANGED, event)
+
+				openedEntityState.active = pump.active
+				openedEntityState.status = pump.status
+			end
 		end
 	end
 end
