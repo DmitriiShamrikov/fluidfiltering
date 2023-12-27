@@ -402,6 +402,7 @@ script.on_event(defines.events.on_robot_built_entity, OnEntityBuilt, entityFilte
 script.on_event(defines.events.on_entity_destroyed, function(event)
 	if event.unit_number ~= nil then
 		UnregisterEntity(event.unit_number)
+		script.raise_event(ON_ENTITY_DESTROYED_CUSTOM, event)
 	end
 end)
 

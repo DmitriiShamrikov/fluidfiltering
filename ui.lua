@@ -27,6 +27,7 @@ local SIGNAL_CONSTANT_TEXT_NAME = 'ui-signal-text'
 local SIGNAL_SET_CONSTANT_BUTTON_NAME = 'ui-signal-set'
 
 ON_ENTITY_STATE_CHANGED = script.generate_event_name()
+ON_ENTITY_DESTROYED_CUSTOM = script.generate_event_name()
 
 local SIGNALS_FRAME_HEIGHT = 930
 local SIGNALS_ROW_HEIGHT = 40 -- styles.slot_button.size
@@ -862,12 +863,14 @@ function OnWindowClosed(player, name)
 		g_OpenedEntitiesByPlayer[player.index] = nil
 		g_GuiElements[player.index].entityWindow = nil
 
-		local idx = IndexOf(g_OpenedEntities[entity.unit_number].players, player.index)
-		if idx then
-			table.remove(g_OpenedEntities[entity.unit_number].players, idx)
-		end
-		if #(g_OpenedEntities[entity.unit_number].players) == 0 then
-			g_OpenedEntities[entity.unit_number] = nil
+		if entity.valid then
+			local idx = IndexOf(g_OpenedEntities[entity.unit_number].players, player.index)
+			if idx then
+				table.remove(g_OpenedEntities[entity.unit_number].players, idx)
+			end
+			if #(g_OpenedEntities[entity.unit_number].players) == 0 then
+				g_OpenedEntities[entity.unit_number] = nil
+			end
 		end
 	elseif name == SIGNAL_FRAME_NAME then
 		if player.gui.screen[SIGNAL_OVERLAY_NAME] then
@@ -1227,6 +1230,16 @@ end)
 script.on_event(ON_ENTITY_STATE_CHANGED, function(event)
 	for _, playerIdx in pairs(g_OpenedEntities[event.entity.unit_number].players) do
 		FillEntityStatus(g_GuiElements[playerIdx].entityWindow, event.entity)
+	end
+end)
+
+script.on_event(ON_ENTITY_DESTROYED_CUSTOM, function(event)
+	if g_OpenedEntities[event.unit_number] then
+		for _, playerIdx in pairs(g_OpenedEntities[event.unit_number].players) do
+			local player = game.get_player(playerIdx)
+			CloseWindow(player, player.gui.screen[ENTITY_FRAME_NAME])
+		end
+		g_OpenedEntities[event.unit_number] = nil
 	end
 end)
 
