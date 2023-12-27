@@ -153,9 +153,6 @@ function OnGuiOpened(event)
 	end
 
 	local player = game.get_player(event.player_index)
-	if player == nil then
-		return
-	end
 
 	local isPump = event.entity.name == 'filter-pump'
 	local isWagon = event.entity.name == 'filter-fluid-wagon'
@@ -245,46 +242,48 @@ function OpenEntityWindow(player, entity)
 	local disableFilterButton = global.pumps[entity.unit_number] and global.pumps[entity.unit_number][2] == CircuitMode.SetFilter
 	FillFilterButton(elements.chooseButton, entity, disableFilterButton)
 
-	local redNetwork = entity.get_circuit_network(defines.wire_type.red)
-	local greenNetwork = entity.get_circuit_network(defines.wire_type.green)
-	elements.redNetworkId.visible = redNetwork ~= nil
-	elements.greenNetworkId.visible = greenNetwork ~= nil
-
-	-- TODO: make these fancy tooltips showing all signals in the network?
-
-	if redNetwork then
-		elements.redNetworkId.caption = {'', {'gui-control-behavior.connected-to-network'}, ': ', {'gui-control-behavior.red-network-id', redNetwork.network_id}}
-		elements.redNetworkId.tooltip = {'', {'gui-control-behavior.circuit-network'}, ': ', redNetwork.network_id}
-	end
-	if greenNetwork then
-		elements.greenNetworkId.caption = {'',{'gui-control-behavior.connected-to-network'}, ': ', {'gui-control-behavior.green-network-id', greenNetwork.network_id}}
-		elements.greenNetworkId.tooltip = {'', {'gui-control-behavior.circuit-network'}, ': ', greenNetwork.network_id}
-	end
-
 	if isPump then
-		if global.pumps[entity.unit_number] then
-			elements.circuitMode.noneRadio.state = global.pumps[entity.unit_number][2] == CircuitMode.None
-			elements.circuitMode.enableDisableRadio.state = global.pumps[entity.unit_number][2] == CircuitMode.EnableDisable
-			elements.circuitMode.setFilterRadio.state = global.pumps[entity.unit_number][2] == CircuitMode.SetFilter
-		else
-			elements.circuitMode.noneRadio.state = true
-			elements.circuitMode.enableDisableRadio.state = false
-			elements.circuitMode.setFilterRadio.state = false
+		local redNetwork = entity.get_circuit_network(defines.wire_type.red)
+		local greenNetwork = entity.get_circuit_network(defines.wire_type.green)
+		elements.redNetworkId.visible = redNetwork ~= nil
+		elements.greenNetworkId.visible = greenNetwork ~= nil
+
+		-- TODO: make these fancy tooltips showing all signals in the network?
+
+		if redNetwork then
+			elements.redNetworkId.caption = {'', {'gui-control-behavior.connected-to-network'}, ': ', {'gui-control-behavior.red-network-id', redNetwork.network_id}}
+			elements.redNetworkId.tooltip = {'', {'gui-control-behavior.circuit-network'}, ': ', redNetwork.network_id}
 		end
+		if greenNetwork then
+			elements.greenNetworkId.caption = {'',{'gui-control-behavior.connected-to-network'}, ': ', {'gui-control-behavior.green-network-id', greenNetwork.network_id}}
+			elements.greenNetworkId.tooltip = {'', {'gui-control-behavior.circuit-network'}, ': ', greenNetwork.network_id}
+		end
+
+		if isPump then
+			if global.pumps[entity.unit_number] then
+				elements.circuitMode.noneRadio.state = global.pumps[entity.unit_number][2] == CircuitMode.None
+				elements.circuitMode.enableDisableRadio.state = global.pumps[entity.unit_number][2] == CircuitMode.EnableDisable
+				elements.circuitMode.setFilterRadio.state = global.pumps[entity.unit_number][2] == CircuitMode.SetFilter
+			else
+				elements.circuitMode.noneRadio.state = true
+				elements.circuitMode.enableDisableRadio.state = false
+				elements.circuitMode.setFilterRadio.state = false
+			end
+		end
+
+		local behavior = entity.get_or_create_control_behavior()
+
+		FillCondition(elements.circuitCondition, behavior.circuit_condition.condition)
+
+		FillLogisticBlock(elements, entity)
+
+		FillCondition(elements.logisticCondition, behavior.logistic_condition.condition)
 	end
-
-	local behavior = entity.get_or_create_control_behavior()
-
-	FillCondition(elements.circuitCondition, behavior.circuit_condition.condition)
-
-	FillLogisticBlock(elements, entity)
-
-	FillCondition(elements.logisticCondition, behavior.logistic_condition.condition)
 
 	ToggleCircuitLogisiticBlocksVisibility(player, entity, elements)
-	
-	player.opened = entityFrame
 
+	player.opened = entityFrame
+	
 	RequestLocalizedSignalNames(player)
 end
 
@@ -1003,7 +1002,8 @@ end
 script.on_event(defines.events.on_gui_opened, OnGuiOpened)
 script.on_event('open_gui', function(event)
 	local player = game.get_player(event.player_index)
-	if player.selected == nil or player.selected == g_OpenedEntitiesByPlayer[player.index] or player.cursor_stack then
+	local hasSomethingInHand = player.cursor_stack and player.cursor_stack.valid and player.cursor_stack.valid_for_read
+	if player.selected == nil or player.selected == g_OpenedEntitiesByPlayer[player.index] or hasSomethingInHand then
 		return
 	end
 
