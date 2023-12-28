@@ -139,7 +139,7 @@ function OnEntityBuilt(event)
 	if event.tags then
 		local filter = event.tags['filter']
 		if filter then
-			event.created_entity.fluidbox.set_filter(1, {name=filter, force=true})
+			SetPumpFilter(event.created_entity, filter)
 
 			local player = game.get_player(event.player_index)
 			if player ~= nil then
@@ -171,10 +171,7 @@ function OnSettingsPasted(event)
 		end
 
 		local filter = event.source.fluidbox.get_filter(1)
-		if filter then
-			filter.force = true
-		end
-		event.destination.fluidbox.set_filter(1, filter)
+		SetPumpFilter(event.destination, filter and filter.name or nil)
 	elseif event.source.type == 'fluid-wagon' and event.destination.name == 'filter-fluid-wagon' then
 		local filter = global.wagons[event.source.unit_number] and global.wagons[event.source.unit_number][2] or nil
 		if filter == nil then
