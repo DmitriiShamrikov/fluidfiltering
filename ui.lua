@@ -153,9 +153,12 @@ function OnGuiOpened(event)
 	end
 
 	local player = game.get_player(event.player_index)
+	if not player.can_reach_entity(event.entity) then
+		return
+	end
 
-	local isPump = event.entity.name == 'filter-pump'
-	local isWagon = event.entity.name == 'filter-fluid-wagon'
+	local isPump = IsFilterPump(event.entity)
+	local isWagon = IsFilterFluidWagon(event.entity)
 	local hasMainlUI = event.name == defines.events.on_gui_opened
 	if isPump or isWagon then
 		if isWagon and hasMainlUI then
@@ -181,11 +184,11 @@ end
 function OpenFluidFilterPanel(player, entity)
 	local guiType = nil
 	local filterFluid = nil
-	if entity.type == 'pump' then
+	if IsPump(entity) then
 		local filter = entity.fluidbox.get_filter(1)
 		filterFluid = filter and filter.name or nil
 		guiType = defines.relative_gui_type.entity_with_energy_source_gui
-	elseif entity.type == 'fluid-wagon' then
+	elseif IsFluidWagon(entity) then
 		local filter = global.wagons[entity.unit_number]
 		filterFluid = filter and filter[2] or nil
 		if entity.prototype.grid_prototype ~= nil then
@@ -204,7 +207,7 @@ function OpenFluidFilterPanel(player, entity)
 		local anchor = {
 			gui = guiType,
 			position = defines.relative_gui_position.bottom,
-			names = {'filter-pump', 'filter-fluid-wagon'}
+			names = {'filter-pump', 'filter-fluid-wagon'} -- TODO: should be all created wagon prototypes from data.lua
 		}
 		panelFrame = player.gui.relative.add{type='frame', name=frameName, caption='Filter', anchor=anchor}
 		local contentFrame = panelFrame.add{type='frame', style='inside_shallow_frame_with_padding'}
@@ -217,7 +220,7 @@ function OpenFluidFilterPanel(player, entity)
 end
 
 function OpenEntityWindow(player, entity)
-	local isPump = entity.type == 'pump'
+	local isPump = IsPump(entity)
 
 	local elements = {}
 	local entityFrame = player.gui.screen[ENTITY_FRAME_NAME]
@@ -861,6 +864,7 @@ function OnWindowClosed(player, name)
 		local entity = g_OpenedEntitiesByPlayer[player.index]
 		g_OpenedEntitiesByPlayer[player.index] = nil
 		g_GuiElements[player.index].entityWindow = nil
+		g_GuiElements[player.index] = nil
 
 		if entity.valid then
 			local idx = IndexOf(g_OpenedEntities[entity.unit_number].players, player.index)
@@ -911,7 +915,7 @@ end
 ---------------------------------------
 
 function SetFilter(player, entity, fluid)
-	if entity.type == 'pump' then
+	if IsPump(entity) then
 		SetPumpFilter(entity, fluid)
 	else -- fluid-wagon
 		if fluid == nil then
@@ -926,20 +930,22 @@ function SetFilter(player, entity, fluid)
 end
 
 function ConnectToLogisiticNetwork(entity, connect)
-	if entity.type == 'pump' then
-		local behavior = entity.get_control_behavior()
-		if not behavior then
-			if not connect then
-				return
-			end
-			behavior = entity.get_or_create_control_behavior()
-		end
-		behavior.connect_to_logistic_network = connect
+	if not IsPump(entity) then
+		return
 	end
+
+	local behavior = entity.get_control_behavior()
+	if not behavior then
+		if not connect then
+			return
+		end
+		behavior = entity.get_or_create_control_behavior()
+	end
+	behavior.connect_to_logistic_network = connect
 end
 
 function SetCircuitMode(player, entity, circuitMode)
-	if entity.type ~= 'pump' then
+	if not IsPump(entity) then
 		return
 	end
 
@@ -1220,6 +1226,14 @@ script.on_event(defines.events.on_gui_closed, function(event)
 			OnWindowClosed(player, event.element.name)
 			event.element.destroy()
 		end
+	end
+end)
+
+script.on_event(defines.events.on_player_changed_position, function(event)
+	local player = game.get_player(event.player_index)
+	local entity = g_OpenedEntitiesByPlayer[player.index]
+	if entity ~= nil and not player.can_reach_entity(entity) then
+		CloseWindow(player, player.gui.screen[ENTITY_FRAME_NAME])
 	end
 end)
 

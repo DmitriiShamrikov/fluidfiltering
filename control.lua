@@ -11,8 +11,8 @@ CircuitMode =
 	SetFilter = 2
 }
 
--- global.pumps - {{entity, CircuitMode, {render-object-id, ...}}, ...}
--- global.wagons - {{entity, filter (string)}}
+-- global.pumps - {{entity, CircuitMode, {render-object-id, ...}}, ...} -- contains ALL pumps
+-- global.wagons - {{entity, filter (string)}} -- contains only wagons with filters
 
 function GetSignalGroups()
 	if #(g_Signals) == 0 then
@@ -83,6 +83,22 @@ function GetSignalGroup(signalName)
 	return nil
 end
 
+function IsPump(entity)
+	return entity.type == 'pump'
+end
+
+function IsFilterPump(entity)
+	return entity.name == 'filter-pump' -- TODO: should be all created pump prototypes from data.lua
+end
+
+function IsFluidWagon(entity)
+	return entity.type == 'fluid-wagon'
+end
+
+function IsFilterFluidWagon(entity)
+	return entity.name == 'filter-fluid-wagon' -- TODO: should be all created wagon prototypes from data.lua
+end
+
 function IsCircuitNetworkUnlocked(player)
 	return player.force.recipes['red-wire'] ~= nil and player.force.recipes['red-wire'].enabled
 end
@@ -135,17 +151,31 @@ function InitGlobal()
 end
 
 function OnEntityBuilt(event)
-	RegisterPump(event.created_entity)
-	if event.tags then
-		local filter = event.tags['filter']
-		if filter then
-			SetPumpFilter(event.created_entity, filter)
+	if IsPump(event.created_entity) then
+		RegisterPump(event.created_entity)
+		if event.tags and IsFilterPump(event.created_entity) then
+			local filter = event.tags['filter']
+			if filter then
+				SetPumpFilter(event.created_entity, filter)
+			end
 
-			local player = game.get_player(event.player_index)
-			if player ~= nil then
-				player.print('Setting filter for entity ' .. event.created_entity.unit_number .. ': ' .. filter)
+			local circuitMode = event.tags['circuit_mode']
+			if circuitMode ~= nil then
+				global.pumps[event.created_entity.unit_number][2] = circuitMode
 			end
 		end
+	elseif IsFilterFluidWagon(event.created_entity) then
+		if event.tags and event.tags['filter'] then
+			local filter = event.tags['filter']
+			global.wagons[event.created_entity.unit_number] = {event.created_entity, filter}
+			script.register_on_entity_destroyed(event.created_entity)
+		end
+	else -- ghosts
+		-- ghosts from CtrlC/blueprint should already have tags
+		-- we just need to draw and icon on them
+		-- if it's a ghost from undo we need to fetch filter/circuit mode from recently deleted list (undo queue)
+		-- even though pump filter is stored (and serialized) in the fluidbox it doesn't seem to show up in restored entity!
+		game.get_player(1).print(serpent.block(event.tags))
 	end
 end
 
@@ -161,7 +191,8 @@ function UnregisterEntity(uid)
 end
 
 function OnSettingsPasted(event)
-	if event.source.type == 'pump' and event.destination.name == 'filter-pump' then
+	-- we can copy settings from a normal pump (wagon) to a filter pump (wagon) - it will just clear the filter
+	if IsPump(event.source) and IsFilterPump(event.destination) then
 		-- that shouldn't noramlly happen, just being extra careful
 		if global.pumps[event.source.unit_number] == nil then
 			global.pumps[event.source.unit_number] = {event.source, CircuitMode.None, {}}
@@ -170,9 +201,15 @@ function OnSettingsPasted(event)
 			global.pumps[event.destination.unit_number] = {event.destination, CircuitMode.None, {}}
 		end
 
+		local circuitMode = global.pumps[event.source.unit_number][2]
+		if not IsFilterPump(event.source) and IsConnectedToCircuitNetwork(event.source) then
+			circuitMode = CircuitMode.EnableDisable
+		end
+		global.pumps[event.destination.unit_number][2] = circuitMode
+
 		local filter = event.source.fluidbox.get_filter(1)
 		SetPumpFilter(event.destination, filter and filter.name or nil)
-	elseif event.source.type == 'fluid-wagon' and event.destination.name == 'filter-fluid-wagon' then
+	elseif IsFluidWagon(event.source.type) and IsFilterFluidWagon(event.destination) then
 		local filter = global.wagons[event.source.unit_number] and global.wagons[event.source.unit_number][2] or nil
 		if filter == nil then
 			global.wagons[event.destination.unit_number] = nil
@@ -205,10 +242,15 @@ function OnBlueprintSelected(event)
 
 	for bpIndex, entity in ipairs(event.mapping.get()) do
 		if global.pumps[entity.unit_number] ~= nil then
+			local circuitMode = global.pumps[entity.unit_number][2]
+			bp.set_blueprint_entity_tag(bpIndex, 'circuit_mode', circuitMode)
 			local filter = entity.fluidbox.get_filter(1)
 			if filter then
 				bp.set_blueprint_entity_tag(bpIndex, 'filter', filter.name)
 			end
+		elseif global.wagons[entity.unit_number] ~= nil then
+			local filter = global.wagons[entity.unit_number][2]
+			bp.set_blueprint_entity_tag(bpIndex, 'filter', filter)
 		end
 	end
 end
@@ -383,7 +425,9 @@ function UpdatePumps()
 		else
 			local pump = entry[1]
 			UpdateCircuit(pump, entry[2])
-			UpdateState(pump)
+			if not pump.to_be_deconstructed() then
+				UpdateState(pump)
+			end
 
 			local openedEntityState = g_OpenedEntities[pump.unit_number]
 			if openedEntityState and (openedEntityState.active ~= pump.active or openedEntityState.status ~= pump.status) then
@@ -409,7 +453,7 @@ script.on_event(defines.events.on_tick, function(event)
 	UpdatePumps()
 end)
 
-local entityFilters = {{filter='type', type='pump'}}
+local entityFilters = {{filter='type', type='pump'}, {filter='name', name='filter-fluid-wagon'}, {filter='ghost_name', name='filter-pump'}, {filter='ghost_name', name='filter-fluid-wagon'}}
 script.on_event(defines.events.on_built_entity, OnEntityBuilt, entityFilters)
 script.on_event(defines.events.on_robot_built_entity, OnEntityBuilt, entityFilters)
 
