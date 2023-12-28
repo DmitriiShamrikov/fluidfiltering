@@ -11,7 +11,7 @@ CircuitMode =
 	SetFilter = 2
 }
 
--- global.pumps - {{entity, CircuitMode}, ...}
+-- global.pumps - {{entity, CircuitMode, {render-object-id, ...}}, ...}
 -- global.wagons - {{entity, filter (string)}}
 
 function GetSignalGroups()
@@ -121,7 +121,7 @@ function QueryEntities(filter, fn)
 end
 
 function PopulatePumps()
-	global.pumps = QueryEntities({type='pump'}, function(entity) return {entity, CircuitMode.None} end)
+	global.pumps = QueryEntities({type='pump'}, function(entity) return {entity, CircuitMode.None, {}} end)
 end
 
 function InitGlobal()
@@ -150,7 +150,7 @@ function OnEntityBuilt(event)
 end
 
 function RegisterPump(entity)
-	global.pumps[entity.unit_number] = {entity, CircuitMode.None}
+	global.pumps[entity.unit_number] = {entity, CircuitMode.None, {}}
 	script.register_on_entity_destroyed(entity)
 end
 
@@ -164,10 +164,10 @@ function OnSettingsPasted(event)
 	if event.source.type == 'pump' and event.destination.name == 'filter-pump' then
 		-- that shouldn't noramlly happen, just being extra careful
 		if global.pumps[event.source.unit_number] == nil then
-			global.pumps[event.source.unit_number] = {event.source, CircuitMode.None}
+			global.pumps[event.source.unit_number] = {event.source, CircuitMode.None, {}}
 		end
 		if global.pumps[event.destination.unit_number] == nil then
-			global.pumps[event.destination.unit_number] = {event.destination, CircuitMode.None}
+			global.pumps[event.destination.unit_number] = {event.destination, CircuitMode.None, {}}
 		end
 
 		local filter = event.source.fluidbox.get_filter(1)
@@ -341,16 +341,33 @@ function GetFilterFromCircuitNetwork(pump)
 	return signal
 end
 
+function SetPumpFilter(pump, fluid)
+	local fb = pump.fluidbox
+	local filter = fb.get_filter(1)
+	local currentFluid = filter and filter.name or nil
+	if currentFluid ~= fluid then
+		for _, id in pairs(global.pumps[pump.unit_number][3]) do
+			rendering.destroy(id)
+		end
+		global.pumps[pump.unit_number][3] = {}
+
+		if fluid == nil then
+			fb.set_filter(1, nil)
+		else
+			fb.set_filter(1, {name=fluid, force=true})
+
+			global.pumps[pump.unit_number][3] = {
+				rendering.draw_sprite{sprite='utility/entity_info_dark_background', x_scale=0.5, y_scale=0.5, target=pump, surface=pump.surface, only_in_alt_mode=true},
+				rendering.draw_sprite{sprite='fluid/' .. fluid, x_scale=0.47, y_scale=0.47, target=pump, surface=pump.surface, only_in_alt_mode=true}
+			}
+		end
+	end
+end
+
 function UpdateCircuit(pump, circuitMode)
 	if circuitMode == CircuitMode.SetFilter then
 		local newFilter = GetFilterFromCircuitNetwork(pump)
-		local fb = pump.fluidbox
-		local filter = fb.get_filter(1)
-		if newFilter == nil and filter ~= nil then
-			fb.set_filter(1, nil)
-		elseif newFilter ~= nil and (filter == nil or filter.name ~= newFilter) then
-			fb.set_filter(1, {name=newFilter, force=true})
-		end
+		SetPumpFilter(pump, newFilter)
 	end
 end
 

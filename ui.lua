@@ -912,11 +912,7 @@ end
 
 function SetFilter(player, entity, fluid)
 	if entity.type == 'pump' then
-		if fluid == nil then
-			entity.fluidbox.set_filter(1, nil)
-		else
-			entity.fluidbox.set_filter(1, {name=fluid, force=true})
-		end
+		SetPumpFilter(entity, fluid)
 	else -- fluid-wagon
 		if fluid == nil then
 			global.wagons[entity.unit_number] = nil
