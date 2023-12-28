@@ -1224,8 +1224,10 @@ script.on_event(defines.events.on_gui_closed, function(event)
 end)
 
 script.on_event(ON_ENTITY_STATE_CHANGED, function(event)
-	for _, playerIdx in pairs(g_OpenedEntities[event.entity.unit_number].players) do
-		FillEntityStatus(g_GuiElements[playerIdx].entityWindow, event.entity)
+	if g_OpenedEntities[event.entity.unit_number] then
+		for _, playerIdx in pairs(g_OpenedEntities[event.entity.unit_number].players) do
+			FillEntityStatus(g_GuiElements[playerIdx].entityWindow, event.entity)
+		end
 	end
 end)
 
