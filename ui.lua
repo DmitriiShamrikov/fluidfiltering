@@ -1,3 +1,5 @@
+require('constants')
+
 local ENTITY_FRAME_NAME = 'ui-entity'
 local FILTER_FRAME_NAME = 'ui-liquid-filter'
 local CLOSE_BUTTON_NAME = 'ui-close'
@@ -1002,7 +1004,7 @@ end
 ----------------------------------
 
 script.on_event(defines.events.on_gui_opened, OnGuiOpened)
-script.on_event('open_gui', function(event)
+script.on_event(OPEN_GUI_INPUT_EVENT, function(event)
 	local player = game.get_player(event.player_index)
 	local hasSomethingInHand = player.cursor_stack and player.cursor_stack.valid and player.cursor_stack.valid_for_read
 	if player.selected == nil or player.selected == g_OpenedEntitiesByPlayer[player.index] or hasSomethingInHand then

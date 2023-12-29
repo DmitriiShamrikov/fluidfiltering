@@ -1,8 +1,13 @@
+require('constants')
 require('debug')
 require('ui')
 
+local g_InputEvents = {} -- {player-index => {event-name => last-tick-fired}}
 local g_PumpConnectionsCache = {}
 local g_Signals = {} -- {group => {{SignalID},{SignalID}}}
+
+local MAX_DELETED_ENTITIES = 100
+local g_RecentlyDeletedEntities = {}
 
 CircuitMode =
 {
@@ -83,6 +88,10 @@ function GetSignalGroup(signalName)
 	return nil
 end
 
+function IsGhost(entity)
+	return entity.type == 'entity-ghost'
+end
+
 function IsPump(entity)
 	return entity.type == 'pump'
 end
@@ -151,31 +160,42 @@ function InitGlobal()
 end
 
 function OnEntityBuilt(event)
-	if IsPump(event.created_entity) then
-		RegisterPump(event.created_entity)
-		if event.tags and IsFilterPump(event.created_entity) then
-			local filter = event.tags['filter']
-			if filter then
-				SetPumpFilter(event.created_entity, filter)
-			end
+	-- This is a really hacky way to determine if a ghost or entiy was placed by undo rather than a newly built one
+	-- I don't track 'undo' input because Undo can be performed via a button from GUI
+	-- Unfortunately, this doesn't work when the game is paused in editor, because tick counter is not increased
+	local placedByPlayer = event.name == defines.events.on_built_entity
+	local clickedToBuild = placedByPlayer and (g_InputEvents[event.player_index][BUILD_GHOST_INPUT_EVENT] == event.tick or g_InputEvents[event.player_index][BUILD_INPUT_EVENT] == event.tick)
+	local placedByUndo = placedByPlayer and not clickedToBuild
+	local historyEntry = placedByUndo and PopRecentlyDeletedEntry(event.created_entity.position) or nil
+	local tags = event.created_entity.tags or event.tags or {}
+	if historyEntry then
+		tags['filter'] = historyEntry.filter
+		tags['circuit_mode'] = historyEntry.circuitMode
+	end
 
-			local circuitMode = event.tags['circuit_mode']
-			if circuitMode ~= nil then
-				global.pumps[event.created_entity.unit_number][2] = circuitMode
+	if IsGhost(event.created_entity) then
+		event.created_entity.tags = tags
+	else
+		if IsPump(event.created_entity) then
+			RegisterPump(event.created_entity)
+			if IsFilterPump(event.created_entity) then
+				local filter = tags['filter']
+				if filter then
+					SetPumpFilter(event.created_entity, filter)
+				end
+
+				local circuitMode = tags['circuit_mode']
+				if circuitMode then
+					global.pumps[event.created_entity.unit_number][2] = circuitMode
+				end
+			end
+		elseif IsFilterFluidWagon(event.created_entity) then
+			local filter = tags['filter']
+			if filter then
+				global.wagons[event.created_entity.unit_number] = {event.created_entity, filter}
+				script.register_on_entity_destroyed(event.created_entity)
 			end
 		end
-	elseif IsFilterFluidWagon(event.created_entity) then
-		if event.tags and event.tags['filter'] then
-			local filter = event.tags['filter']
-			global.wagons[event.created_entity.unit_number] = {event.created_entity, filter}
-			script.register_on_entity_destroyed(event.created_entity)
-		end
-	else -- ghosts
-		-- ghosts from CtrlC/blueprint should already have tags
-		-- we just need to draw and icon on them
-		-- if it's a ghost from undo we need to fetch filter/circuit mode from recently deleted list (undo queue)
-		-- even though pump filter is stored (and serialized) in the fluidbox it doesn't seem to show up in restored entity!
-		game.get_player(1).print(serpent.block(event.tags))
 	end
 end
 
@@ -253,6 +273,41 @@ function OnBlueprintSelected(event)
 			bp.set_blueprint_entity_tag(bpIndex, 'filter', filter)
 		end
 	end
+end
+
+function AddToRecentlyDeleted(entity)
+	if #(g_RecentlyDeletedEntities) == MAX_DELETED_ENTITIES then
+		table.remove(g_RecentlyDeletedEntities, 1)
+	end
+
+	local entry = {pos=entity.position}
+	if IsFilterPump(entity) then
+		entry.circuitMode = global.pumps[entity.unit_number][2]
+		local filter = entity.fluidbox.get_filter(1)
+		entry.filter = filter and filter.name or nil
+	elseif IsFilterFluidWagon(entity) then
+		local wagon = global.wagons[entity.unit_number]
+		entry.filter = wagon and wagon[2] or nil
+	-- ghosts
+	elseif entity.tags then
+		entry.circuitMode = entity.tags['circuit_mode']
+		entry.filter = entity.tags['filter']
+	end
+
+	table.insert(g_RecentlyDeletedEntities, entry)
+end
+
+function PopRecentlyDeletedEntry(pos)
+	for i = #(g_RecentlyDeletedEntities), 1, -1 do
+		local entry = g_RecentlyDeletedEntities[i]
+		if math.abs(entry.pos.x - pos.x) < 0.001 and math.abs(entry.pos.y - pos.y) < 0.001 then
+			for j = #(g_RecentlyDeletedEntities), i, -1 do
+				table.remove(g_RecentlyDeletedEntities, j)
+			end
+			return entry
+		end
+	end
+	return nil
 end
 
 ------ Update -----
@@ -456,13 +511,45 @@ end)
 local entityFilters = {{filter='type', type='pump'}, {filter='name', name='filter-fluid-wagon'}, {filter='ghost_name', name='filter-pump'}, {filter='ghost_name', name='filter-fluid-wagon'}}
 script.on_event(defines.events.on_built_entity, OnEntityBuilt, entityFilters)
 script.on_event(defines.events.on_robot_built_entity, OnEntityBuilt, entityFilters)
+script.on_event(defines.events.script_raised_built, function(event)
+	local ev = {created_entity=event.entity, tick=event.tick, name=event.name}
+	OnEntityBuilt(ev)
+end, entityFilters)
+
+script.on_event(defines.events.on_post_entity_died, function(event)
+	if event.ghost and IsFilterPump(event.prototype) then
+		local ev = {created_entity=event.ghost, tick=event.tick, name=event.name}
+		OnEntityBuilt(ev)
+	end
+end, {{filter='type', type='pump'}})
 
 script.on_event(defines.events.on_entity_destroyed, function(event)
-	if event.unit_number ~= nil then
+	if event.unit_number then
 		UnregisterEntity(event.unit_number)
 		script.raise_event(ON_ENTITY_DESTROYED_CUSTOM, event)
 	end
 end)
+
+script.on_event(defines.events.script_raised_destroy, function(event)
+	if event.entity.unit_number then
+		UnregisterEntity(event.entity.unit_number)
+		local ev = {unit_number=event.entity.unit_number}
+		script.raise_event(ON_ENTITY_DESTROYED_CUSTOM, ev)
+	end
+end, entityFilters)
+
+entityFilters = {{filter='name', name='filter-pump'}, {filter='name', name='filter-fluid-wagon'}, {filter='ghost_name', name='filter-pump'}, {filter='ghost_name', name='filter-fluid-wagon'}}
+script.on_event(defines.events.on_player_mined_entity, function(event)
+	AddToRecentlyDeleted(event.entity)
+end, entityFilters)
+
+script.on_event(defines.events.on_pre_ghost_deconstructed, function(event)
+	AddToRecentlyDeleted(event.ghost)
+end, entityFilters)
+
+script.on_event(defines.events.on_robot_mined_entity, function(event)
+	AddToRecentlyDeleted(event.entity)
+end, entityFilters)
 
 script.on_event(defines.events.on_player_rotated_entity, function(event)
 	g_PumpConnectionsCache[event.entity.unit_number] = nil
@@ -470,6 +557,16 @@ end)
 
 script.on_event(defines.events.on_entity_settings_pasted, OnSettingsPasted)
 script.on_event(defines.events.on_player_setup_blueprint, OnBlueprintSelected)
+
+script.on_event(BUILD_INPUT_EVENT, function(event)
+	g_InputEvents[event.player_index] = g_InputEvents[event.player_index] or {}
+	g_InputEvents[event.player_index][BUILD_INPUT_EVENT] = event.tick
+end)
+
+script.on_event(BUILD_GHOST_INPUT_EVENT, function(event)
+	g_InputEvents[event.player_index] = g_InputEvents[event.player_index] or {}
+	g_InputEvents[event.player_index][BUILD_GHOST_INPUT_EVENT] = event.tick
+end)
 
 --[[
 
