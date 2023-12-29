@@ -182,6 +182,9 @@ function OnEntityBuilt(event)
 				local filter = tags['filter']
 				if filter then
 					SetPumpFilter(event.created_entity, filter)
+				else
+					-- when entity is revived filter is not passed through ghost tags, but restored by fluidbox directly
+					UpdateFilterIcon(event.created_entity)
 				end
 
 				local circuitMode = tags['circuit_mode']
@@ -435,26 +438,42 @@ function GetFilterFromCircuitNetwork(pump)
 	return signal
 end
 
-function SetPumpFilter(pump, fluid)
-	local fb = pump.fluidbox
-	local filter = fb.get_filter(1)
-	local currentFluid = filter and filter.name or nil
-	if currentFluid ~= fluid then
-		for _, id in pairs(global.pumps[pump.unit_number][3]) do
-			rendering.destroy(id)
-		end
-		global.pumps[pump.unit_number][3] = {}
-
-		if fluid == nil then
-			fb.set_filter(1, nil)
+function UpdateFilterIcon(pump)
+	local filter = pump.fluidbox.get_filter(1)
+	local fluid = filter and filter.name or nil
+	if fluid then
+		local ids = global.pumps[pump.unit_number][3]
+		if #(ids) > 0 then
+			local sprite = 'fluid/' .. fluid
+			if rendering.get_sprite(ids[2]) ~= sprite then
+				rendering.destroy(ids[2])
+				ids[2] = rendering.draw_sprite{sprite='fluid/' .. fluid, x_scale=0.47, y_scale=0.47, target=pump, surface=pump.surface, only_in_alt_mode=true}
+			end
 		else
-			fb.set_filter(1, {name=fluid, force=true})
-
 			global.pumps[pump.unit_number][3] = {
 				rendering.draw_sprite{sprite='utility/entity_info_dark_background', x_scale=0.5, y_scale=0.5, target=pump, surface=pump.surface, only_in_alt_mode=true},
 				rendering.draw_sprite{sprite='fluid/' .. fluid, x_scale=0.47, y_scale=0.47, target=pump, surface=pump.surface, only_in_alt_mode=true}
 			}
 		end
+	else
+		for _, id in pairs(global.pumps[pump.unit_number][3]) do
+			rendering.destroy(id)
+		end
+		global.pumps[pump.unit_number][3] = {}
+	end
+end
+
+function SetPumpFilter(pump, fluid)
+	local fb = pump.fluidbox
+	local filter = fb.get_filter(1)
+	local currentFluid = filter and filter.name or nil
+	if currentFluid ~= fluid then
+		if fluid == nil then
+			fb.set_filter(1, nil)
+		else
+			fb.set_filter(1, {name=fluid, force=true})
+		end
+		UpdateFilterIcon(pump)
 	end
 end
 
@@ -518,6 +537,9 @@ end, entityFilters)
 
 script.on_event(defines.events.on_post_entity_died, function(event)
 	if event.ghost and IsFilterPump(event.prototype) then
+		local tags = event.ghost.tags or {}
+		tags['circuit_mode'] = global.pumps[event.unit_number][2]
+		event.ghost.tags = tags
 		local ev = {created_entity=event.ghost, tick=event.tick, name=event.name}
 		OnEntityBuilt(ev)
 	end
@@ -616,14 +638,14 @@ steam: filter-fluid-wagon[steam] -> filter-pump[]      -> pipe | yes
 
 -- filter-pumps with circuits
 -- everything is connected to a red wire sending [steam=1]
-water: pipe -> filter-pump[None][]      -> pipe | yes
-water: pipe -> filter-pump[None][water] -> pipe | yes
-water: pipe -> filter-pump[None][steam] -> pipe | no
+water: pipe -> filter-pump[None][]         -> pipe | yes
+water: pipe -> filter-pump[None][water]    -> pipe | yes
+water: pipe -> filter-pump[None][steam]    -> pipe | no
 water: pipe -> filter-pump[steam=1][]      -> pipe | yes
 water: pipe -> filter-pump[steam=1][water] -> pipe | yes
 water: pipe -> filter-pump[steam=1][steam] -> pipe | no
 water: pipe -> filter-pump[steam=2][steam] -> pipe | no
-water: pipe -> filter-pump[set][*] -> pipe | no
-steam: pipe -> filter-pump[set][*] -> pipe | yes
+water: pipe -> filter-pump[set][*]         -> pipe | no
+steam: pipe -> filter-pump[set][*]         -> pipe | yes
 
 ]]
