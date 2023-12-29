@@ -96,6 +96,10 @@ function IsPump(entity)
 	return entity.type == 'pump'
 end
 
+function IsGhostPump(entity)
+	return entity.type == 'entity-ghost' and entity.ghost_type == 'pump'
+end
+
 function IsFilterPump(entity)
 	return entity.name == 'filter-pump' -- TODO: should be all created pump prototypes from data.lua
 end
@@ -175,6 +179,10 @@ function OnEntityBuilt(event)
 
 	if IsGhost(event.created_entity) then
 		event.created_entity.tags = tags
+		local filter = tags['filter']
+		if filter and IsGhostPump(event.created_entity) then
+			AddFilterIcon(event.created_entity, filter)
+		end
 	else
 		if IsPump(event.created_entity) then
 			RegisterPump(event.created_entity)
@@ -438,6 +446,13 @@ function GetFilterFromCircuitNetwork(pump)
 	return signal
 end
 
+function AddFilterIcon(entity, fluid)
+	return {
+		rendering.draw_sprite{sprite='utility/entity_info_dark_background', x_scale=0.5, y_scale=0.5, target=entity, surface=entity.surface, only_in_alt_mode=true},
+		rendering.draw_sprite{sprite='fluid/' .. fluid, x_scale=0.47, y_scale=0.47, target=entity, surface=entity.surface, only_in_alt_mode=true}
+	}
+end
+
 function UpdateFilterIcon(pump)
 	local filter = pump.fluidbox.get_filter(1)
 	local fluid = filter and filter.name or nil
@@ -450,10 +465,7 @@ function UpdateFilterIcon(pump)
 				ids[2] = rendering.draw_sprite{sprite='fluid/' .. fluid, x_scale=0.47, y_scale=0.47, target=pump, surface=pump.surface, only_in_alt_mode=true}
 			end
 		else
-			global.pumps[pump.unit_number][3] = {
-				rendering.draw_sprite{sprite='utility/entity_info_dark_background', x_scale=0.5, y_scale=0.5, target=pump, surface=pump.surface, only_in_alt_mode=true},
-				rendering.draw_sprite{sprite='fluid/' .. fluid, x_scale=0.47, y_scale=0.47, target=pump, surface=pump.surface, only_in_alt_mode=true}
-			}
+			global.pumps[pump.unit_number][3] = AddFilterIcon(pump, fluid)
 		end
 	else
 		for _, id in pairs(global.pumps[pump.unit_number][3]) do
