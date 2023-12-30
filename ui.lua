@@ -604,9 +604,10 @@ function CreateSignalChooseWindow(player, elements, includeSpecialSignals, inclu
 	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler'}
 
 	local searchField = titleFlow.add{type='textfield', name=SIGNAL_SEARCH_FIELD_NAME, style='signal_search_field'}
+	searchField.tags = {dirty=false}
 	searchField.visible = false
 
-	titleFlow.add{
+	local searchButton = titleFlow.add{
 		type='sprite-button',
 		name=SIGNAL_SEARCH_BUTTON_NAME,
 		style='frame_action_button',
@@ -702,6 +703,7 @@ function CreateSignalChooseWindow(player, elements, includeSpecialSignals, inclu
 		elements.constantText = constantText
 	end
 
+	elements.searchButton = searchButton
 	elements.searchField = searchField
 	elements.groupsTable = groupsTable
 	elements.scrollPane = scrollPane
@@ -789,6 +791,8 @@ function FilterSignals(player, elements, pattern)
 			end
 		end
 	end
+
+	elements.searchField.tags = {dirty = false}
 end
 
 function SelectSignalGroup(elements, groupName)
@@ -1040,10 +1044,9 @@ script.on_event(defines.events.on_gui_click, function(event)
 		local elements = global.guiState[player.index].signalWindow
 		elements.searchField.visible = event.element.toggled
 		if event.element.toggled then
-			elements.searchField:focus()
+			elements.searchField.focus()
 		else
-			-- TODO: we may end up with not restored filters if player deletes the text, dosn't press Enter, and then clicks the button
-			if elements.searchField.text ~= '' then
+			if elements.searchField.text ~= '' or elements.searchField.tags.dirty then
 				FilterSignals(player, elements, '')
 			end
 			elements.searchField.text = ''
@@ -1207,7 +1210,25 @@ script.on_event(defines.events.on_gui_text_changed, function(event)
 	if event.element.name == SIGNAL_CONSTANT_TEXT_NAME then
 		local elements = global.guiState[player.index].signalWindow
 		elements.constantSlider.slider_value = ConstantValueToSliderValue(event.element.text)
+	elseif event.element.name == SIGNAL_SEARCH_FIELD_NAME then
+		event.element.tags = {dirty = true}
 	end
+end)
+
+script.on_event(FOCUS_SEARCH_INPUT_EVENT, function(event)
+	local player = game.get_player(event.player_index)
+	if global.guiState[player.index] == nil then
+		return
+	end
+
+	local elements = global.guiState[player.index].signalWindow
+	if elements == nil or elements.searchField.visible then
+		return
+	end
+
+	elements.searchButton.toggled = true
+	elements.searchField.visible = true
+	elements.searchField.focus()
 end)
 
 script.on_event(defines.events.on_gui_closed, function(event)
@@ -1221,7 +1242,7 @@ script.on_event(defines.events.on_gui_closed, function(event)
 			local elements = global.guiState[player.index].signalWindow
 			if elements.searchField.visible then
 				elements.searchField.visible = false
-				if elements.searchField.text ~= '' then
+				if elements.searchField.text ~= '' or elements.searchField.tags.dirty then
 					FilterSignals(player, elements, '')
 				end
 				elements.searchField.text = ''
