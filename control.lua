@@ -168,9 +168,10 @@ function OnEntityBuilt(event)
 	-- I don't track 'undo' input because Undo can be performed via a button from GUI
 	-- Unfortunately, this doesn't work when the game is paused in editor, because tick counter is not increased
 	local placedByPlayer = event.name == defines.events.on_built_entity
+	local placedByDying = event.name == defines.events.on_post_entity_died
 	local clickedToBuild = placedByPlayer and (g_InputEvents[event.player_index][BUILD_GHOST_INPUT_EVENT] == event.tick or g_InputEvents[event.player_index][BUILD_INPUT_EVENT] == event.tick)
 	local placedByUndo = placedByPlayer and not clickedToBuild
-	local historyEntry = placedByUndo and PopRecentlyDeletedEntry(event.created_entity.position) or nil
+	local historyEntry = (placedByUndo or placedByDying) and PopRecentlyDeletedEntry(event.created_entity.position) or nil
 	local tags = event.created_entity.tags or event.tags or {}
 	if historyEntry then
 		tags['filter'] = historyEntry.filter
@@ -549,9 +550,7 @@ end, entityFilters)
 
 script.on_event(defines.events.on_post_entity_died, function(event)
 	if event.ghost and IsFilterPump(event.prototype) then
-		local tags = event.ghost.tags or {}
-		tags['circuit_mode'] = global.pumps[event.unit_number][2]
-		event.ghost.tags = tags
+		game.get_player(1).print('yoo')
 		local ev = {created_entity=event.ghost, tick=event.tick, name=event.name}
 		OnEntityBuilt(ev)
 	end
@@ -570,6 +569,12 @@ script.on_event(defines.events.script_raised_destroy, function(event)
 		local ev = {unit_number=event.entity.unit_number}
 		script.raise_event(ON_ENTITY_DESTROYED_CUSTOM, ev)
 	end
+end, entityFilters)
+
+entityFilters = {{filter='name', name='filter-pump'}, {filter='name', name='filter-fluid-wagon'}}
+script.on_event(defines.events.on_entity_died, function(event)
+	game.get_player(1).print('yo')
+	AddToRecentlyDeleted(event.entity)
 end, entityFilters)
 
 entityFilters = {{filter='name', name='filter-pump'}, {filter='name', name='filter-fluid-wagon'}, {filter='ghost_name', name='filter-pump'}, {filter='ghost_name', name='filter-fluid-wagon'}}
@@ -657,6 +662,7 @@ water: pipe -> filter-pump[steam=1][]      -> pipe | yes
 water: pipe -> filter-pump[steam=1][water] -> pipe | yes
 water: pipe -> filter-pump[steam=1][steam] -> pipe | no
 water: pipe -> filter-pump[steam=2][steam] -> pipe | no
+water: pipe -> filter-pump[steam=2][water] -> pipe | no
 water: pipe -> filter-pump[set][*]         -> pipe | no
 steam: pipe -> filter-pump[set][*]         -> pipe | yes
 
