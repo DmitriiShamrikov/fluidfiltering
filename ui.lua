@@ -226,7 +226,7 @@ function OpenFluidFilterPanel(player, entity)
 			position = defines.relative_gui_position.bottom,
 			names = {'filter-pump', 'filter-fluid-wagon'} -- TODO: should be all created wagon prototypes from data.lua
 		}
-		panelFrame = player.gui.relative.add{type='frame', name=frameName, caption='Filter', anchor=anchor}
+		panelFrame = player.gui.relative.add{type='frame', name=frameName, caption={'gui-inserter.filter'}, anchor=anchor}
 		local contentFrame = panelFrame.add{type='frame', style='inside_shallow_frame_with_padding'}
 		chooseButton = contentFrame.add{type='choose-elem-button', name=CHOOSE_FILTER_BUTTON_NAME, elem_type='fluid'}
 	else
@@ -469,7 +469,8 @@ function CreateEntityWindow(player, elements)
 	CreateLogisticConditionBlock(leftColumnFlow, elements)
 
 	local rightColumnFlow = columnsFlow.add{type='flow', direction='vertical', style='right_column'}
-	rightColumnFlow.add{type='label', caption='Filter:', style='bold_label'}
+	local label = rightColumnFlow.add{type='label', caption={'gui-inserter.filter'}, style='bold_label'}
+	label.style.right_padding = 5
 	elements.chooseButton = rightColumnFlow.add{type='choose-elem-button', name=CHOOSE_FILTER_BUTTON_NAME, elem_type='fluid'}
 
 	return entityFrame
