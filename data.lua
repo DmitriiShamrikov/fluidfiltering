@@ -100,8 +100,6 @@ styles.signal_overlay = {
 	hovered_graphical_set = {},
 	clicked_graphical_set = {},
 	left_click_sound = {},
-	width = 4000,
-	height = 2400,
 }
 
 -- input

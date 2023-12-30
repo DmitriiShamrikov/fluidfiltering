@@ -31,7 +31,6 @@ local SIGNAL_SET_CONSTANT_BUTTON_NAME = 'ui-signal-set'
 ON_ENTITY_STATE_CHANGED = script.generate_event_name()
 ON_ENTITY_DESTROYED_CUSTOM = script.generate_event_name()
 
-local SIGNALS_FRAME_HEIGHT = 930
 local SIGNALS_ROW_HEIGHT = 40 -- styles.slot_button.size
 local SIGNALS_GROUP_ROW_SIZE = 6
 local SIGNALS_ROW_SIZE = 10
@@ -561,7 +560,7 @@ function OpenSignalChooseWindow(player, signal, constant, includeSpecialSignals,
 	local elements = {}
 	local signalFrame = player.gui.screen[SIGNAL_FRAME_NAME]
 	if signalFrame == nil then
-		signalFrame = CreateSignalChooseWindow(player, elements, includeSpecialSignals)
+		signalFrame = CreateSignalChooseWindow(player, elements, includeSpecialSignals, constant ~= nil)
 		g_GuiElements[player.index].signalWindow = elements
 	else
 		elements = g_GuiElements[player.index].signalWindow
@@ -574,13 +573,8 @@ function OpenSignalChooseWindow(player, signal, constant, includeSpecialSignals,
 	end
 
 	if constant ~= nil then
-		elements.constantFrame.visible = true
 		elements.constantText.text = tostring(constant)
 		elements.constantSlider.slider_value = ConstantValueToSliderValue(tostring(constant))
-	else
-		elements.constantFrame.visible = false
-		elements.constantText.text = ''
-		elements.constantSlider.slider_value = 0
 	end
 
 	local posX = math.min(clickPos.x, player.display_resolution.width - signalFrame.tags.size.x)
@@ -589,11 +583,13 @@ function OpenSignalChooseWindow(player, signal, constant, includeSpecialSignals,
 	signalFrame.location = {x=posX, y=posY}
 end
 
-function CreateSignalChooseWindow(player, elements, includeSpecialSignals)
-	player.gui.screen.add{type='button', name=SIGNAL_OVERLAY_NAME, style='signal_overlay'}
+function CreateSignalChooseWindow(player, elements, includeSpecialSignals, includeConstant)
+	local overlayButton = player.gui.screen.add{type='button', name=SIGNAL_OVERLAY_NAME, style='signal_overlay'}
+	overlayButton.style.width = player.display_resolution.width / player.display_scale
+	overlayButton.style.height = player.display_resolution.height / player.display_scale
 
 	local signalFrame = player.gui.screen.add{type='frame', direction='vertical', name=SIGNAL_FRAME_NAME, style='inner_frame_in_outer_frame'}
-	signalFrame.style.maximal_height = SIGNALS_FRAME_HEIGHT
+	signalFrame.style.maximal_height = player.display_resolution.height * 0.85 / player.display_scale
 
 	local titleFlow = signalFrame.add{type='flow', direction='horizontal', style='centering_horizontal_flow'}
 	titleFlow.drag_target = signalFrame
@@ -685,23 +681,25 @@ function CreateSignalChooseWindow(player, elements, includeSpecialSignals)
 		end
 	end
 
-	local constantFrame = contentFrame.add{type='frame', direction='vertical', style='inside_shallow_frame_with_padding'}
+	if includeConstant then
+		local constantFrame = contentFrame.add{type='frame', direction='vertical', style='inside_shallow_frame_with_padding'}
 
-	constantFrame.add{type='label', caption={'gui.or-set-a-constant'}, style='frame_title'}
+		constantFrame.add{type='label', caption={'gui.or-set-a-constant'}, style='frame_title'}
 
-	local constantFlow = constantFrame.add{type='flow', direction='horizontal', style='centering_horizontal_flow'}
-	local constantSlider = constantFlow.add{type='slider', maximum_value=41, name=SIGNAL_CONSTANT_SLIDER_NAME}
-	local constantText = constantFlow.add{type='textfield', text=0, numeric=true, allow_negative=true, name=SIGNAL_CONSTANT_TEXT_NAME, style='slider_value_textfield'}
-	constantFlow.add{type='empty-widget', style='horizontal_filler'}
-	constantFlow.add{type='button', name=SIGNAL_SET_CONSTANT_BUTTON_NAME, caption={'gui.set'}, style='green_button'}
+		local constantFlow = constantFrame.add{type='flow', direction='horizontal', style='centering_horizontal_flow'}
+		local constantSlider = constantFlow.add{type='slider', maximum_value=41, name=SIGNAL_CONSTANT_SLIDER_NAME}
+		local constantText = constantFlow.add{type='textfield', text=0, numeric=true, allow_negative=true, name=SIGNAL_CONSTANT_TEXT_NAME, style='slider_value_textfield'}
+		constantFlow.add{type='empty-widget', style='horizontal_filler'}
+		constantFlow.add{type='button', name=SIGNAL_SET_CONSTANT_BUTTON_NAME, caption={'gui.set'}, style='green_button'}
 
-	elements.constantFrame = constantFrame
+		elements.constantSlider = constantSlider
+		elements.constantText = constantText
+	end
+
 	elements.searchField = searchField
 	elements.groupsTable = groupsTable
 	elements.scrollPane = scrollPane
 	elements.scrollFrame = scrollFrame
-	elements.constantSlider = constantSlider
-	elements.constantText = constantText
 
 	local frameHight =
 		8 +  -- frame.top_padding (it's 4 in the style...)
@@ -713,12 +711,14 @@ function CreateSignalChooseWindow(player, elements, includeSpecialSignals)
 		4 +  -- filter_scroll_pane.bottom_padding
 		4 +  -- filter_frame.bottom_padding
 		12 + -- WTF
-		12 + -- inside_shallow_frame_with_padding.padding
-		28 + -- label height
-		28 + -- textbox.minimal_height or button.minimal_height
-		12 + -- inside_shallow_frame_with_padding.padding
+		(includeConstant and (
+			12 + -- inside_shallow_frame_with_padding.padding
+			28 + -- label height
+			28 + -- textbox.minimal_height or button.minimal_height
+			12 -- inside_shallow_frame_with_padding.padding
+		) or 0) +
 		12   -- frame.bottom_padding (it's 8 in the style...)
-	frameHight = math.min(frameHight, SIGNALS_FRAME_HEIGHT)
+	frameHight = math.min(frameHight, signalFrame.style.maximal_height)
 
 	local frameWidth =
 		12 +  -- frame.left_padding (it's 8 in the style...)
