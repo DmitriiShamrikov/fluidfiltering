@@ -16,8 +16,10 @@ CircuitMode =
 	SetFilter = 2
 }
 
--- global.pumps - {{entity, CircuitMode, {render-object-id, ...}}, ...} -- contains ALL pumps
--- global.wagons - {{entity, filter (string)}} -- contains only wagons with filters
+-- global.pumps - {unit-number => {entity, CircuitMode, {render-object-id, ...}}, ...} -- contains ALL pumps
+-- global.wagons - {unit-number => {entity, filter (string)}} -- contains only wagons with filters
+-- global.guiState - {player-index => {entity=entity, entityWindow={}, signalWindow={}}}
+-- global.openedEntities = {} -- {entity-id => {players={player-index, ...}, active=bool, status=int}}
 
 function GetSignalGroups()
 	if #(g_Signals) == 0 then
@@ -160,6 +162,14 @@ function InitGlobal()
 
 	if global.wagons == nil then
 		global.wagons = {}
+	end
+
+	if global.guiState == nil then
+		global.guiState = {}
+	end
+
+	if global.openedEntities == nil then
+		global.openedEntities = {}
 	end
 end
 
@@ -516,7 +526,7 @@ function UpdatePumps()
 				UpdateState(pump)
 			end
 
-			local openedEntityState = g_OpenedEntities[pump.unit_number]
+			local openedEntityState = global.openedEntities[pump.unit_number]
 			if openedEntityState and (openedEntityState.active ~= pump.active or openedEntityState.status ~= pump.status) then
 				local event = {
 					entity = pump,
