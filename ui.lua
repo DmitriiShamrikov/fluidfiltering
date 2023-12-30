@@ -137,19 +137,29 @@ end
 ----- UI creation and interaction ------
 ----------------------------------------
 
-function FindElementByName(root, name)
-	if not root or root.name == name then
-		return root
+function IfGuiOpened(fn)
+	local function wrapper(event)
+		local player = game.get_player(event.player_index)
+		if global.guiState[player.index] == nil then
+			return
+		end
+		fn(player, event)
 	end
+	return wrapper
+end
 
-	for _, element in ipairs(root.children) do
-		local result = FindElementByName(element, name)
-		if result then
-			return result
+function ForAllPlayersOpenedEntity(fn)
+	local function wrapper(event)
+		local id = event.unit_number or event.entity.unit_number
+		if global.openedEntities[id] then
+			local players = global.openedEntities[id].players
+			for _, playerIdx in pairs(players) do
+				local player = game.get_player(playerIdx)
+				fn(player, event)
+			end
 		end
 	end
-
-	return nil
+	return wrapper
 end
 
 function OnGuiOpened(event)
@@ -1024,156 +1034,135 @@ script.on_event(OPEN_GUI_INPUT_EVENT, function(event)
 	OnGuiOpened(event)
 end)
 
-script.on_event(defines.events.on_gui_click, function(event)
-	local player = game.get_player(event.player_index)
-	if global.guiState[player.index] == nil then
-		return
-	end
-
+script.on_event(defines.events.on_gui_click, IfGuiOpened(function(player, event)
 	---- Signal Selection Window handling ----
-	if event.element.name == SIGNAL_SET_CONSTANT_BUTTON_NAME then
-		local value = global.guiState[player.index].signalWindow.constantText.text
-		local elements = global.guiState[player.index].entityWindow
-		SelectConstant(global.guiState[player.index].entity, elements, tonumber(value))
-		CloseWindow(player, event.element)
-		return
-	elseif event.element.name == SIGNAL_OVERLAY_NAME then
-		CloseWindow(player, player.gui.screen[SIGNAL_FRAME_NAME])
-		return
-	elseif event.element.name == SIGNAL_SEARCH_BUTTON_NAME then
-		local elements = global.guiState[player.index].signalWindow
-		elements.searchField.visible = event.element.toggled
-		if event.element.toggled then
-			elements.searchField.focus()
-		else
-			if elements.searchField.text ~= '' or elements.searchField.tags.dirty then
-				FilterSignals(player, elements, '')
-			end
-			elements.searchField.text = ''
-		end
-	elseif event.element.tags then
-		if event.element.tags.type == 'signal-group' then
-			local elements = global.guiState[player.index].signalWindow
-			SelectSignalGroup(elements, event.element.name)
-		elseif event.element.tags.type == 'signal' then
-			local elements = global.guiState[player.index].entityWindow
-			SelectSignal(global.guiState[player.index].entity, elements, event.element.elem_value)
+	local elements = global.guiState[player.index].signalWindow
+	if elements then
+		if event.element.name == SIGNAL_SET_CONSTANT_BUTTON_NAME then
+			local value = elements.constantText.text
+			local entityWindowElements = global.guiState[player.index].entityWindow
+			SelectConstant(global.guiState[player.index].entity, entityWindowElements, tonumber(value))
 			CloseWindow(player, event.element)
 			return
+		elseif event.element.name == SIGNAL_OVERLAY_NAME then
+			CloseWindow(player, player.gui.screen[SIGNAL_FRAME_NAME])
+			return
+		elseif event.element.name == SIGNAL_SEARCH_BUTTON_NAME then
+			elements.searchField.visible = event.element.toggled
+			if event.element.toggled then
+				elements.searchField.focus()
+			else
+				if elements.searchField.text ~= '' or elements.searchField.tags.dirty then
+					FilterSignals(player, elements, '')
+				end
+				elements.searchField.text = ''
+			end
+		elseif event.element.tags then
+			if event.element.tags.type == 'signal-group' then
+				SelectSignalGroup(elements, event.element.name)
+			elseif event.element.tags.type == 'signal' then
+				local entityWindowElements = global.guiState[player.index].entityWindow
+				SelectSignal(global.guiState[player.index].entity, entityWindowElements, event.element.elem_value)
+				CloseWindow(player, event.element)
+				return
+			end
 		end
-	end
 
-	local textField = FindElementByName(player.gui.screen[SIGNAL_FRAME_NAME], SIGNAL_CONSTANT_TEXT_NAME)
-	if textField and textField.text == '' then
-		textField.text = '0'
+		local constantText = elements.constantText
+		if constantText and constantText.text == '' then
+			constantText.text = '0'
+		end
 	end
 	------------------------------------------
 
 	---- Entity Window handling ----
-	if event.element.name == CLOSE_BUTTON_NAME then
-		CloseWindow(player, event.element)
-		return
-	elseif event.element.name == CIRCUIT_BUTTON_NAME or event.element.name == LOGISTIC_BUTTON_NAME then
-		local elements = global.guiState[player.index].entityWindow
-		if event.element.toggled then
-			if event.element.name == CIRCUIT_BUTTON_NAME then
-				elements.logisticButton.toggled = false
-			else
-				elements.circuitButton.toggled = false
+	elements = global.guiState[player.index].entityWindow
+	if elements then
+		if event.element.name == CLOSE_BUTTON_NAME then
+			CloseWindow(player, event.element)
+			return
+		elseif event.element.name == CIRCUIT_BUTTON_NAME or event.element.name == LOGISTIC_BUTTON_NAME then
+			if event.element.toggled then
+				if event.element.name == CIRCUIT_BUTTON_NAME then
+					elements.logisticButton.toggled = false
+				else
+					elements.circuitButton.toggled = false
+				end
 			end
-		end
-		ToggleCircuitLogisiticBlocksVisibility(player, global.guiState[player.index].entity, elements)
-	elseif event.element.name == LOGISITIC_CONNECT_CHECKBOX_NAME then
-		local elements = global.guiState[player.index].entityWindow
-		ConnectToLogisiticNetwork(global.guiState[player.index].entity, event.element.state)
-		FillLogisticBlock(elements, global.guiState[player.index].entity)
-		ToggleCircuitLogisiticBlocksVisibility(player, global.guiState[player.index].entity, elements)
-	elseif event.element.name == CHOOSE_CIRCUIT_SIGNAL2_BUTTON_NAME or event.element.name == CHOOSE_CIRCUIT_SIGNAL2_CONSTANT_BUTTON_NAME or
-			event.element.name == CHOOSE_LOGISTIC_SIGNAL2_BUTTON_NAME or event.element.name == CHOOSE_LOGISTIC_SIGNAL2_CONSTANT_BUTTON_NAME then
-		if event.button == defines.mouse_button_type.right then
-			if event.element.type == 'choose-elem-button' then
+			ToggleCircuitLogisiticBlocksVisibility(player, global.guiState[player.index].entity, elements)
+		elseif event.element.name == LOGISITIC_CONNECT_CHECKBOX_NAME then
+			ConnectToLogisiticNetwork(global.guiState[player.index].entity, event.element.state)
+			FillLogisticBlock(elements, global.guiState[player.index].entity)
+			ToggleCircuitLogisiticBlocksVisibility(player, global.guiState[player.index].entity, elements)
+		elseif event.element.name == CHOOSE_CIRCUIT_SIGNAL2_BUTTON_NAME or event.element.name == CHOOSE_CIRCUIT_SIGNAL2_CONSTANT_BUTTON_NAME or
+				event.element.name == CHOOSE_LOGISTIC_SIGNAL2_BUTTON_NAME or event.element.name == CHOOSE_LOGISTIC_SIGNAL2_CONSTANT_BUTTON_NAME then
+			if event.button == defines.mouse_button_type.right then
+				if event.element.type == 'choose-elem-button' then
+					event.element.elem_value = nil
+				else
+					event.element.caption = ''
+				end
+
+				SetEnabledCondition(global.guiState[player.index].entity, event.element, nil)
+			else
+				local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
+				SelectSignal2Chooser(conditionElements, true)
+
+				local signal = event.element.type == 'choose-elem-button' and event.element.elem_value or nil
+				local constant = event.element.type == 'button' and event.element.tags.value or 0
+				OpenSignalChooseWindow(player, signal, constant, false, event.cursor_display_location)
+			end
+		elseif event.element.name == CHOOSE_CIRCUIT_SIGNAL1_BUTTON_NAME or event.element.name == CHOOSE_LOGISTIC_SIGNAL1_BUTTON_NAME then
+			if event.button == defines.mouse_button_type.right then
 				event.element.elem_value = nil
+				SetEnabledCondition(global.guiState[player.index].entity, event.element, nil)
 			else
-				event.element.caption = ''
+				local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
+				SelectSignal1Chooser(conditionElements, true)
+
+				local signal = event.element.type == 'choose-elem-button' and event.element.elem_value or nil
+				OpenSignalChooseWindow(player, signal, nil, true, event.cursor_display_location)
+			end
+		elseif event.element.tags and event.element.tags.radiogroup == 'circuit' then
+			for _, radio in pairs(elements.circuitMode) do
+				if radio ~= event.element then
+					radio.state = false
+				end
 			end
 
-			SetEnabledCondition(global.guiState[player.index].entity, event.element, nil)
-		else
-			local elements = global.guiState[player.index].entityWindow
-			local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
-			SelectSignal2Chooser(conditionElements, true)
-
-			local signal = event.element.type == 'choose-elem-button' and event.element.elem_value or nil
-			local constant = event.element.type == 'button' and event.element.tags.value or 0
-			OpenSignalChooseWindow(player, signal, constant, false, event.cursor_display_location)
-		end
-	elseif event.element.name == CHOOSE_CIRCUIT_SIGNAL1_BUTTON_NAME or event.element.name == CHOOSE_LOGISTIC_SIGNAL1_BUTTON_NAME then
-		if event.button == defines.mouse_button_type.right then
-			event.element.elem_value = nil
-			SetEnabledCondition(global.guiState[player.index].entity, event.element, nil)
-		else
-			local elements = global.guiState[player.index].entityWindow
-			local conditionElements = elements.circuitFlow.visible and elements.circuitCondition or elements.logisticCondition
-			SelectSignal1Chooser(conditionElements, true)
-
-			local signal = event.element.type == 'choose-elem-button' and event.element.elem_value or nil
-			OpenSignalChooseWindow(player, signal, nil, true, event.cursor_display_location)
-		end
-	elseif event.element.tags and event.element.tags.radiogroup == 'circuit' then
-		local elements = global.guiState[player.index].entityWindow
-		for _, radio in pairs(elements.circuitMode) do
-			if radio ~= event.element then
-				radio.state = false
+			local circuitMode = CircuitMode.None
+			if elements.circuitMode.enableDisableRadio.state then
+				circuitMode = CircuitMode.EnableDisable
+			elseif elements.circuitMode.setFilterRadio.state then
+				circuitMode = CircuitMode.SetFilter
 			end
-		end
 
-		local circuitMode = CircuitMode.None
-		if elements.circuitMode.enableDisableRadio.state then
-			circuitMode = CircuitMode.EnableDisable
-		elseif elements.circuitMode.setFilterRadio.state then
-			circuitMode = CircuitMode.SetFilter
+			local setFilterFromCircuit = elements.circuitMode.setFilterRadio.state
+			SetCircuitMode(player, global.guiState[player.index].entity, circuitMode)
+			UpdateCircuit(global.guiState[player.index].entity, circuitMode)
+			FillCondition(elements.circuitCondition, global.guiState[player.index].entity.get_or_create_control_behavior().circuit_condition.condition)
+			FillFilterButton(elements.chooseButton, global.guiState[player.index].entity, circuitMode == CircuitMode.SetFilter)
+			ToggleCircuitLogisiticBlocksVisibility(player, global.guiState[player.index].entity, elements)
 		end
-
-		local setFilterFromCircuit = elements.circuitMode.setFilterRadio.state
-		SetCircuitMode(player, global.guiState[player.index].entity, circuitMode)
-		UpdateCircuit(global.guiState[player.index].entity, circuitMode)
-		FillCondition(elements.circuitCondition, global.guiState[player.index].entity.get_or_create_control_behavior().circuit_condition.condition)
-		FillFilterButton(elements.chooseButton, global.guiState[player.index].entity, circuitMode == CircuitMode.SetFilter)
-		ToggleCircuitLogisiticBlocksVisibility(player, global.guiState[player.index].entity, elements)
 	end
-end)
+end))
 
 -- choose-elem-button
-script.on_event(defines.events.on_gui_elem_changed, function(event)
-	local player = game.get_player(event.player_index)
-	if global.guiState[player.index] == nil then
-		return
-	end
-
+script.on_event(defines.events.on_gui_elem_changed, IfGuiOpened(function(player, event)
 	if event.element.name == CHOOSE_FILTER_BUTTON_NAME then
 		SetFilter(player, global.guiState[player.index].entity, event.element.elem_value)
 	end
-end)
+end))
 
 -- drop-down
-script.on_event(defines.events.on_gui_selection_state_changed, function(event)
-	local player = game.get_player(event.player_index)
-	if global.guiState[player.index] == nil then
-		return
-	end
-
+script.on_event(defines.events.on_gui_selection_state_changed, IfGuiOpened(function(player, event)
 	if event.element.tags and event.element.tags.enable_disable then
 		SetEnabledCondition(global.guiState[player.index].entity, event.element, nil)
 	end
-end)
+end))
 
 -- textfield
-script.on_event(defines.events.on_gui_confirmed, function(event)
-	local player = game.get_player(event.player_index)
-	if global.guiState[player.index] == nil then
-		return
-	end
-
+script.on_event(defines.events.on_gui_confirmed, IfGuiOpened(function(player, event)
 	if event.element.name == SIGNAL_CONSTANT_TEXT_NAME then
 		local value = global.guiState[player.index].signalWindow.constantText.text
 		local elements = global.guiState[player.index].entityWindow
@@ -1185,42 +1174,27 @@ script.on_event(defines.events.on_gui_confirmed, function(event)
 			FilterSignals(player, elements, event.element.text:lower())
 		end
 	end
-end)
+end))
 
 -- slider
-script.on_event(defines.events.on_gui_value_changed, function(event)
-	local player = game.get_player(event.player_index)
-	if global.guiState[player.index] == nil then
-		return
-	end
-
+script.on_event(defines.events.on_gui_value_changed, IfGuiOpened(function(player, event)
 	if event.element.name == SIGNAL_CONSTANT_SLIDER_NAME then
 		local elements = global.guiState[player.index].signalWindow
 		elements.constantText.text = tostring(SliderValueToConstantValue(event.element.slider_value))
 	end
-end)
+end))
 
 -- textfield
-script.on_event(defines.events.on_gui_text_changed, function(event)
-	local player = game.get_player(event.player_index)
-	if global.guiState[player.index] == nil then
-		return
-	end
-
+script.on_event(defines.events.on_gui_text_changed, IfGuiOpened(function(player, event)
 	if event.element.name == SIGNAL_CONSTANT_TEXT_NAME then
 		local elements = global.guiState[player.index].signalWindow
 		elements.constantSlider.slider_value = ConstantValueToSliderValue(event.element.text)
 	elseif event.element.name == SIGNAL_SEARCH_FIELD_NAME then
 		event.element.tags = {dirty = true}
 	end
-end)
+end))
 
-script.on_event(FOCUS_SEARCH_INPUT_EVENT, function(event)
-	local player = game.get_player(event.player_index)
-	if global.guiState[player.index] == nil then
-		return
-	end
-
+script.on_event(FOCUS_SEARCH_INPUT_EVENT, IfGuiOpened(function(player, event)
 	local elements = global.guiState[player.index].signalWindow
 	if elements == nil or elements.searchField.visible then
 		return
@@ -1229,14 +1203,9 @@ script.on_event(FOCUS_SEARCH_INPUT_EVENT, function(event)
 	elements.searchButton.toggled = true
 	elements.searchField.visible = true
 	elements.searchField.focus()
-end)
+end))
 
-script.on_event(defines.events.on_gui_closed, function(event)
-	local player = game.get_player(event.player_index)
-	if global.guiState[player.index] == nil then
-		return
-	end
-
+script.on_event(defines.events.on_gui_closed, IfGuiOpened(function(player, event)
 	if event.element then
 		if player.gui.screen[SIGNAL_FRAME_NAME] then
 			local elements = global.guiState[player.index].signalWindow
@@ -1255,37 +1224,23 @@ script.on_event(defines.events.on_gui_closed, function(event)
 			event.element.destroy()
 		end
 	end
-end)
+end))
 
-script.on_event(defines.events.on_player_changed_position, function(event)
-	local player = game.get_player(event.player_index)
-	if global.guiState[player.index] == nil then
-		return
-	end
-
+script.on_event(defines.events.on_player_changed_position, IfGuiOpened(function(player, event)
 	local entity = global.guiState[player.index].entity
 	if not player.can_reach_entity(entity) then
 		CloseWindow(player, player.gui.screen[ENTITY_FRAME_NAME])
 	end
-end)
+end))
 
-script.on_event(ON_ENTITY_STATE_CHANGED, function(event)
-	if global.openedEntities[event.entity.unit_number] then
-		for _, playerIdx in pairs(global.openedEntities[event.entity.unit_number].players) do
-			FillEntityStatus(global.guiState[playerIdx].entityWindow, event.entity)
-		end
-	end
-end)
+script.on_event(ON_ENTITY_STATE_CHANGED, ForAllPlayersOpenedEntity(function(player, event)
+	FillEntityStatus(global.guiState[player.index].entityWindow, event.entity)
+end))
 
-script.on_event(ON_ENTITY_DESTROYED_CUSTOM, function(event)
-	if global.openedEntities[event.unit_number] then
-		for _, playerIdx in pairs(global.openedEntities[event.unit_number].players) do
-			local player = game.get_player(playerIdx)
-			CloseWindow(player, player.gui.screen[ENTITY_FRAME_NAME])
-		end
-		global.openedEntities[event.unit_number] = nil
-	end
-end)
+script.on_event(ON_ENTITY_DESTROYED_CUSTOM, ForAllPlayersOpenedEntity(function(player, event)
+	CloseWindow(player, player.gui.screen[ENTITY_FRAME_NAME])
+	global.openedEntities[event.unit_number] = nil
+end))
 
 script.on_event(defines.events.on_string_translated, function(event)
 	if not event.translated then
