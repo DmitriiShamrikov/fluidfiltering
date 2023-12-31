@@ -1,42 +1,7 @@
 require('constants')
 
-local ENTITY_FRAME_NAME = 'ui-entity'
-local FILTER_FRAME_NAME = 'ui-liquid-filter'
-local CLOSE_BUTTON_NAME = 'ui-close'
-local CIRCUIT_BUTTON_NAME = 'ui-circuit'
-local LOGISTIC_BUTTON_NAME = 'ui-logistic'
-local CHOOSE_FILTER_BUTTON_NAME = 'ui-liquid-filter-chooser'
-local CHOOSE_CIRCUIT_SIGNAL1_BUTTON_NAME = 'ui-circuit-signal1-chooser'
-local CHOOSE_CIRCUIT_SIGNAL1_FAKE_BUTTON_NAME = 'ui-circuit-signal1-choser-fake'
-local CHOOSE_CIRCUIT_COMPARATOR_BUTTON_NAME = 'ui-circuit-comparator-chooser'
-local CHOOSE_CIRCUIT_SIGNAL2_BUTTON_NAME = 'ui-circuit-signal2-chooser'
-local CHOOSE_CIRCUIT_SIGNAL2_FAKE_BUTTON_NAME = 'ui-circuit-signal2-choser-fake'
-local CHOOSE_CIRCUIT_SIGNAL2_CONSTANT_BUTTON_NAME = 'ui-circuit-signal-chooser-constant'
-local CHOOSE_LOGISTIC_SIGNAL1_BUTTON_NAME = 'ui-logistic-signal1-chooser'
-local CHOOSE_LOGISTIC_SIGNAL1_FAKE_BUTTON_NAME = 'ui-logistic-signal1-choser-fake'
-local CHOOSE_LOGISTIC_COMPARATOR_BUTTON_NAME = 'ui-logistic-comparator-chooser'
-local CHOOSE_LOGISTIC_SIGNAL2_BUTTON_NAME = 'ui-logistic-signal-chooser'
-local CHOOSE_LOGISTIC_SIGNAL2_FAKE_BUTTON_NAME = 'ui-logistic-signal2-choser-fake'
-local CHOOSE_LOGISTIC_SIGNAL2_CONSTANT_BUTTON_NAME = 'ui-logistic-signal-chooser-constant'
-local LOGISITIC_CONNECT_CHECKBOX_NAME = 'ui-logistic-connect'
-
-local SIGNAL_FRAME_NAME = 'ui-signal'
-local SIGNAL_OVERLAY_NAME = 'ui-signal-overlay'
-local SIGNAL_SEARCH_BUTTON_NAME = 'ui-search'
-local SIGNAL_SEARCH_FIELD_NAME = 'ui-search-field'
-local SIGNAL_CONSTANT_SLIDER_NAME = 'ui-signal-slider'
-local SIGNAL_CONSTANT_TEXT_NAME = 'ui-signal-text'
-local SIGNAL_SET_CONSTANT_BUTTON_NAME = 'ui-signal-set'
-
 ON_ENTITY_STATE_CHANGED = script.generate_event_name()
 ON_ENTITY_DESTROYED_CUSTOM = script.generate_event_name()
-
-local SIGNALS_ROW_HEIGHT = 40 -- styles.slot_button.size
-local SIGNALS_GROUP_ROW_SIZE = 6
-local SIGNALS_ROW_SIZE = 10
-
-local SIGNAL_VALUE_MIN = -2^31
-local SIGNAL_VALUE_MAX = 2^31 - 1
 
 local g_LocalizedSignalNames = {} -- {player-index => {localised-id => localized-name}}
 local g_LocalizationRequests = {}
@@ -60,6 +25,8 @@ function ConstantValueToSliderValue(cvalue)
 end
 
 function GetShortStringValue(value)
+	local SIGNAL_VALUE_MIN = -2^31
+	local SIGNAL_VALUE_MAX = 2^31 - 1
 	value = math.max(SIGNAL_VALUE_MIN, math.min(SIGNAL_VALUE_MAX, value))
 
 	local result = ''
@@ -414,7 +381,7 @@ function CreateEntityWindow(player, elements)
 	titleFlow.drag_target = entityFrame
 	titleFlow.style.horizontal_spacing = 8
 	elements.title = titleFlow.add{type='label', ignored_by_interaction=true, style='frame_title'}
-	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler'}
+	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style=HEADER_FILLER_STYLE}
 
 	elements.circuitButton = titleFlow.add{
 		type='sprite-button',
@@ -464,11 +431,11 @@ function CreateEntityWindow(player, elements)
 	local columnsFlow = contentFlow.add{type='flow', direction='horizontal'}
 	columnsFlow.style.top_margin = 4
 
-	local leftColumnFlow = columnsFlow.add{type='flow', direction='vertical', style='left_column'}
+	local leftColumnFlow = columnsFlow.add{type='flow', direction='vertical', style=LEFT_COLUMN_STYLE}
 	CreateCircuitConditionBlock(leftColumnFlow, elements)
 	CreateLogisticConditionBlock(leftColumnFlow, elements)
 
-	local rightColumnFlow = columnsFlow.add{type='flow', direction='vertical', style='right_column'}
+	local rightColumnFlow = columnsFlow.add{type='flow', direction='vertical', style=RIGHT_COLUMN_STYLE}
 	local label = rightColumnFlow.add{type='label', caption={'gui-inserter.filter'}, style='bold_label'}
 	label.style.right_padding = 5
 	elements.chooseButton = rightColumnFlow.add{type='choose-elem-button', name=CHOOSE_FILTER_BUTTON_NAME, elem_type='fluid'}
@@ -553,7 +520,7 @@ function CreateEnabledDisabledBlock(root, elements, isCircuit)
 	fakeRightChooser.visible = false
 	fakeRightChooser.toggled = true
 	name = isCircuit and CHOOSE_CIRCUIT_SIGNAL2_CONSTANT_BUTTON_NAME or CHOOSE_LOGISTIC_SIGNAL2_CONSTANT_BUTTON_NAME
-	local constantChooser = conditionSelectorFlow.add{type='button', tags=tags, name=name, style='constant_button', tooltip={'gui.constant-number'}}
+	local constantChooser = conditionSelectorFlow.add{type='button', tags=tags, name=name, style=CONSTANT_BUTTON_STYLE, tooltip={'gui.constant-number'}}
 	constantChooser.visible = false
 
 	local flowElements = {
@@ -601,7 +568,7 @@ function OpenSignalChooseWindow(player, signal, constant, includeSpecialSignals,
 end
 
 function CreateSignalChooseWindow(player, elements, includeSpecialSignals, includeConstant)
-	local overlayButton = player.gui.screen.add{type='button', name=SIGNAL_OVERLAY_NAME, style='signal_overlay'}
+	local overlayButton = player.gui.screen.add{type='button', name=SIGNAL_OVERLAY_NAME, style=SIGNAL_OVERLAY_STYLE}
 	overlayButton.style.width = player.display_resolution.width / player.display_scale
 	overlayButton.style.height = player.display_resolution.height / player.display_scale
 
@@ -612,9 +579,9 @@ function CreateSignalChooseWindow(player, elements, includeSpecialSignals, inclu
 	titleFlow.drag_target = signalFrame
 	titleFlow.style.horizontal_spacing = 8
 	titleFlow.add{type='label', caption={'gui.select-signal'}, ignored_by_interaction=true, style='frame_title'}
-	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style='header_filler'}
+	titleFlow.add{type='empty-widget', ignored_by_interaction=true, style=HEADER_FILLER_STYLE}
 
-	local searchField = titleFlow.add{type='textfield', name=SIGNAL_SEARCH_FIELD_NAME, style='signal_search_field'}
+	local searchField = titleFlow.add{type='textfield', name=SIGNAL_SEARCH_FIELD_NAME, style=SIGNAL_SEARCH_FIELD_STYLE}
 	searchField.tags = {dirty=false}
 	searchField.visible = false
 
@@ -707,7 +674,7 @@ function CreateSignalChooseWindow(player, elements, includeSpecialSignals, inclu
 		local constantFlow = constantFrame.add{type='flow', direction='horizontal', style='centering_horizontal_flow'}
 		local constantSlider = constantFlow.add{type='slider', maximum_value=41, name=SIGNAL_CONSTANT_SLIDER_NAME}
 		local constantText = constantFlow.add{type='textfield', text=0, numeric=true, allow_negative=true, name=SIGNAL_CONSTANT_TEXT_NAME, style='slider_value_textfield'}
-		constantFlow.add{type='empty-widget', style='horizontal_filler'}
+		constantFlow.add{type='empty-widget', style=HORIZONTAL_FILLER_STYLE}
 		constantFlow.add{type='button', name=SIGNAL_SET_CONSTANT_BUTTON_NAME, caption={'gui.set'}, style='green_button'}
 
 		elements.constantSlider = constantSlider
