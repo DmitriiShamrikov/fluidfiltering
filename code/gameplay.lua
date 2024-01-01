@@ -2,6 +2,7 @@ require('constants')
 
 local g_InputEvents = {} -- {player-index => {event-name => last-tick-fired}}
 local g_PumpConnectionsCache = {}
+local g_FilterPrototypesCache = {}
 local g_Signals = {} -- {group => {{SignalID},{SignalID}}}
 local g_RecentlyDeletedEntities = {} -- {{MapPosition, CircuitMode, filter (string)}, ...}
 
@@ -79,6 +80,18 @@ function GetSignalGroup(signalName)
 	return nil
 end
 
+function IsFilterEntity(entity)
+	if g_FilterPrototypesCache[entity.name] == nil then
+		local isFilter = false
+		local placedBy = entity.prototype.items_to_place_this
+		if #placedBy > 0 then
+			isFilter = game.item_prototypes[placedBy[1].name].order:sub(-#ORDER_FILTER_SUFFIX) == ORDER_FILTER_SUFFIX
+		end
+		g_FilterPrototypesCache[entity.name] = isFilter
+	end
+	return g_FilterPrototypesCache[entity.name]
+end
+
 function IsGhost(entity)
 	return entity.type == 'entity-ghost'
 end
@@ -92,7 +105,7 @@ function IsGhostPump(entity)
 end
 
 function IsFilterPump(entity)
-	return entity.name == 'filter-pump' -- TODO: should be all created pump prototypes from data.lua
+	return IsPump(entity) and IsFilterEntity(entity)
 end
 
 function IsFluidWagon(entity)
@@ -100,7 +113,7 @@ function IsFluidWagon(entity)
 end
 
 function IsFilterFluidWagon(entity)
-	return entity.name == 'filter-fluid-wagon' -- TODO: should be all created wagon prototypes from data.lua
+	return IsFluidWagon(entity) and IsFilterEntity(entity)
 end
 
 function IsCircuitNetworkUnlocked(player)
@@ -539,7 +552,7 @@ script.on_event(defines.events.on_tick, function(event)
 	UpdatePumps()
 end)
 
-local entityFilters = {{filter='type', type='pump'}, {filter='name', name='filter-fluid-wagon'}, {filter='ghost_name', name='filter-pump'}, {filter='ghost_name', name='filter-fluid-wagon'}}
+local entityFilters = {{filter='type', type='pump'}, {filter='type', type='fluid-wagon'}, {filter='ghost_type', type='pump'}, {filter='ghost_type', type='fluid-wagon'}}
 script.on_event(defines.events.on_built_entity, OnEntityBuilt, entityFilters)
 script.on_event(defines.events.on_robot_built_entity, OnEntityBuilt, entityFilters)
 script.on_event(defines.events.script_raised_built, function(event)
@@ -549,7 +562,6 @@ end, entityFilters)
 
 script.on_event(defines.events.on_post_entity_died, function(event)
 	if event.ghost and IsFilterPump(event.prototype) then
-		game.get_player(1).print('yoo')
 		local ev = {created_entity=event.ghost, tick=event.tick, name=event.name}
 		OnEntityBuilt(ev)
 	end
@@ -570,13 +582,6 @@ script.on_event(defines.events.script_raised_destroy, function(event)
 	end
 end, entityFilters)
 
-entityFilters = {{filter='name', name='filter-pump'}, {filter='name', name='filter-fluid-wagon'}}
-script.on_event(defines.events.on_entity_died, function(event)
-	game.get_player(1).print('yo')
-	AddToRecentlyDeleted(event.entity)
-end, entityFilters)
-
-entityFilters = {{filter='name', name='filter-pump'}, {filter='name', name='filter-fluid-wagon'}, {filter='ghost_name', name='filter-pump'}, {filter='ghost_name', name='filter-fluid-wagon'}}
 script.on_event(defines.events.on_player_mined_entity, function(event)
 	AddToRecentlyDeleted(event.entity)
 end, entityFilters)
@@ -586,6 +591,11 @@ script.on_event(defines.events.on_pre_ghost_deconstructed, function(event)
 end, entityFilters)
 
 script.on_event(defines.events.on_robot_mined_entity, function(event)
+	AddToRecentlyDeleted(event.entity)
+end, entityFilters)
+
+entityFilters = {{filter='type', type='pump'}, {filter='type', type='fluid-wagon'}}
+script.on_event(defines.events.on_entity_died, function(event)
 	AddToRecentlyDeleted(event.entity)
 end, entityFilters)
 
@@ -605,64 +615,3 @@ script.on_event(BUILD_GHOST_INPUT_EVENT, function(event)
 	g_InputEvents[event.player_index] = g_InputEvents[event.player_index] or {}
 	g_InputEvents[event.player_index][BUILD_GHOST_INPUT_EVENT] = event.tick
 end)
-
---[[
-
-tests:
-
--- vanilla stuff
-water: pipe -> pump               -> pipe        | yes
-water: pipe -> pump               -> fluid-wagon | yes
-water: fluid-wagon -> pump        -> pipe        | yes
-
--- filter-pump with vanilla stuff
-water: pipe -> filter-pump[water] -> pipe        | yes
-steam: pipe -> filter-pump[water] -> pipe        | no
-water: pipe -> filter-pump[]      -> pipe        | yes
-steam: pipe -> filter-pump[]      -> pipe        | yes
-water: tank -> filter-pump[water] -> pipe        | yes
-steam: tank -> filter-pump[water] -> pipe        | no
-water: pipe -> filter-pump[water] -> tank        | yes
-steam: pipe -> filter-pump[water] -> tank        | no
-
--- filter-pump with vanilla wagons 
-water: fluid-wagon -> filter-pump[water] -> pipe | yes
-steam: fluid-wagon -> filter-pump[water] -> pipe | no
-water: fluid-wagon -> filter-pump[]      -> pipe | yes
-steam: fluid-wagon -> filter-pump[]      -> pipe | yes
-water: pipe -> filter-pump[water] -> fluid-wagon | yes
-steam: pipe -> filter-pump[water] -> fluid-wagon | no
-water: pipe -> filter-pump[]      -> fluid-wagon | yes
-steam: pipe -> filter-pump[]      -> fluid-wagon | yes
-
--- filter-fluid-wagon with vanilla stuff
-water: pipe -> pump -> filter-fluid-wagon[]      | yes
-water: pipe -> pump -> filter-fluid-wagon[water] | yes
-steam: pipe -> pump -> filter-fluid-wagon[water] | no
-water: filter-fluid-wagon[] -> pump -> pipe      | yes
-water: filter-fluid-wagon[water] -> pump -> pipe | yes
-
--- filter-pumps with filter-fluid-wagons
-water: filter-fluid-wagon[]      -> filter-pump[water] -> pipe | yes
-steam: filter-fluid-wagon[]      -> filter-pump[water] -> pipe | no
-water: filter-fluid-wagon[]      -> filter-pump[]      -> pipe | yes
-steam: filter-fluid-wagon[]      -> filter-pump[]      -> pipe | yes
-water: filter-fluid-wagon[water] -> filter-pump[water] -> pipe | yes
-steam: filter-fluid-wagon[steam] -> filter-pump[water] -> pipe | no
-water: filter-fluid-wagon[water] -> filter-pump[]      -> pipe | yes
-steam: filter-fluid-wagon[steam] -> filter-pump[]      -> pipe | yes
-
--- filter-pumps with circuits
--- everything is connected to a red wire sending [steam=1]
-water: pipe -> filter-pump[None][]         -> pipe | yes
-water: pipe -> filter-pump[None][water]    -> pipe | yes
-water: pipe -> filter-pump[None][steam]    -> pipe | no
-water: pipe -> filter-pump[steam=1][]      -> pipe | yes
-water: pipe -> filter-pump[steam=1][water] -> pipe | yes
-water: pipe -> filter-pump[steam=1][steam] -> pipe | no
-water: pipe -> filter-pump[steam=2][steam] -> pipe | no
-water: pipe -> filter-pump[steam=2][water] -> pipe | no
-water: pipe -> filter-pump[set][*]         -> pipe | no
-steam: pipe -> filter-pump[set][*]         -> pipe | yes
-
-]]

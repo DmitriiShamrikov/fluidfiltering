@@ -53,3 +53,5 @@ CircuitMode =
 	EnableDisable = 1,
 	SetFilter = 2
 }
+
+ORDER_FILTER_SUFFIX = '-a[' .. MOD_PREFIX .. '_filter]'
