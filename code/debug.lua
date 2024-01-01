@@ -29,7 +29,22 @@ function PrintWagons()
 end
 
 function RepopulatePumps()
-	global.pumps = QueryEntities({type='pump'}, function(entity) return {entity, false} end)
+	global.pumps = QueryEntities({type='pump'}, function(entity) return {entity, CircuitMode.None, {}} end)
+
+	local ids = rendering.get_all_ids('fluidfiltering')
+	local icons = {}
+	for _, id in pairs(ids) do
+		local target = rendering.get_target(id)
+		if target and target.entity then
+			local pumpEntry = global.pumps[target.entity.unit_number]
+			if pumpEntry then
+				local sprite = rendering.get_sprite(id)
+				local prefix = 'fluid/'
+				local idx = sprite:sub(#prefix) == prefix and 2 or 1
+				table.insert(pumpEntry[3], id, idx)
+			end
+		end
+	end
 end
 
 commands.add_command('ff.reset', nil, Clear)
