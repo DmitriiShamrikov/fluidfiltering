@@ -1,9 +1,10 @@
 {
-	"name": "fluidfilter",
-	"version": "0.0.1",
-	"title": "Fluid Filter",
+	"name": "fluidfiltering",
+	"version": "1.0.0",
+	"title": "Fluid Filtering",
 	"author": "BlackOverlord",
+	"contact": "blackoverlordd@gmail.com",
 	"factorio_version": "1.1",
-	"dependencies": ["base >= 1.1"],
-	"description": "This mod adds pumps and fluid wagons with ability te set a filter for a specific fluid"
+	"dependencies": ["base >= 1.1.83"],
+	"description": "Adds ability set filter for pumps, works the same as filter for inserters. Can be set from circuit as well.\nAdds ability to set filter for fluid wagons."
 }
