@@ -105,18 +105,17 @@ end
 ----------------------------------------
 
 function IfGuiOpened(fn)
-	local function wrapper(event)
+	return function(event)
 		local player = game.get_player(event.player_index)
 		if global.guiState[player.index] == nil then
 			return
 		end
 		fn(player, event)
 	end
-	return wrapper
 end
 
 function ForAllPlayersOpenedEntity(fn)
-	local function wrapper(event)
+	return function(event)
 		local id = event.unit_number or event.entity.unit_number
 		if global.openedEntities[id] then
 			local players = global.openedEntities[id].players
@@ -126,7 +125,6 @@ function ForAllPlayersOpenedEntity(fn)
 			end
 		end
 	end
-	return wrapper
 end
 
 function OnGuiOpened(event)
@@ -162,6 +160,8 @@ function OnGuiOpened(event)
 		entry.active = event.entity.active
 		entry.status = event.entity.status
 		global.openedEntities[event.entity.unit_number] = entry
+	elseif hasMainlUI then
+		CloseFluidFilterPanel(player, event.entity)
 	end
 end
 
@@ -201,6 +201,22 @@ function OpenFluidFilterPanel(player, entity)
 	end
 
 	chooseButton.elem_value = filterFluid
+end
+
+function CloseFluidFilterPanel(player, entity)
+	local guis = {
+		defines.relative_gui_type.entity_with_energy_source_gui,
+		defines.relative_gui_type.equipment_grid_gui,
+		defines.relative_gui_type.additional_entity_info_gui
+	}
+	for _, guiType in pairs(guis) do
+		local frameName = FILTER_FRAME_NAME .. '-' .. guiType
+		local panelFrame = player.gui.relative[frameName]
+		if panelFrame then
+			OnWindowClosed(player, FILTER_FRAME_NAME)
+			panelFrame.destroy()
+		end
+	end
 end
 
 function OpenEntityWindow(player, entity)
