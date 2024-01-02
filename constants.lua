@@ -54,4 +54,4 @@ CircuitMode =
 	SetFilter = 2
 }
 
-ORDER_FILTER_SUFFIX = '-a[' .. MOD_PREFIX .. '_filter]'
+DUMMY_TECH_NAME = MOD_PREFIX .. '_filter_entities'

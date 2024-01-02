@@ -2,7 +2,7 @@ require('constants')
 
 local g_InputEvents = {} -- {player-index => {event-name => last-tick-fired}}
 local g_PumpConnectionsCache = {}
-local g_FilterPrototypesCache = {}
+local g_FilterPrototypesCache = nil
 local g_Signals = {} -- {group => {{SignalID},{SignalID}}}
 local g_RecentlyDeletedEntities = {} -- {{MapPosition, CircuitMode, filter (string)}, ...}
 
@@ -81,15 +81,19 @@ function GetSignalGroup(signalName)
 end
 
 function IsFilterEntity(entity)
-	if g_FilterPrototypesCache[entity.name] == nil then
-		local isFilter = false
-		local placedBy = entity.prototype.items_to_place_this
-		if #placedBy > 0 then
-			isFilter = game.item_prototypes[placedBy[1].name].order:sub(-#ORDER_FILTER_SUFFIX) == ORDER_FILTER_SUFFIX
+	if g_FilterPrototypesCache == nil then
+		g_FilterPrototypesCache = {}
+		local techProto = game.technology_prototypes[DUMMY_TECH_NAME]
+		if techProto then
+			for _, effect in pairs(techProto.effects) do
+				local itemProto = game.item_prototypes[effect.item]
+				if itemProto and itemProto.place_result then
+					g_FilterPrototypesCache[itemProto.place_result.name] = true
+				end
+			end
 		end
-		g_FilterPrototypesCache[entity.name] = isFilter
 	end
-	return g_FilterPrototypesCache[entity.name]
+	return g_FilterPrototypesCache[entity.name] ~= nil
 end
 
 function IsGhost(entity)
