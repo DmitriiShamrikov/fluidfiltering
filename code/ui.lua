@@ -106,10 +106,10 @@ end
 
 function IfGuiOpened(fn)
 	return function(event)
-		local player = game.get_player(event.player_index)
-		if global.guiState[player.index] == nil then
+		if global.guiState[event.player_index] == nil then
 			return
 		end
+		local player = game.get_player(event.player_index)
 		fn(player, event)
 	end
 end
@@ -151,6 +151,12 @@ function OnGuiOpened(event)
 			OpenEntityWindow(player, event.entity)
 		end
 
+		-- this is in order to close the window properly when it's destroyed
+		-- all pumps have already registered for this event
+		if isWagon and not hasMainlUI then
+			script.register_on_entity_destroyed(event.entity)
+		end
+
 		if prevEntity and global.openedEntities[prevEntity.unit_number] then
 			RemoveValue(global.openedEntities[prevEntity.unit_number].players, player.index)
 		end
@@ -161,7 +167,7 @@ function OnGuiOpened(event)
 		entry.status = event.entity.status
 		global.openedEntities[event.entity.unit_number] = entry
 	elseif hasMainlUI then
-		CloseFluidFilterPanel(player, event.entity)
+		CloseFluidFilterPanel(player)
 	end
 end
 
@@ -202,7 +208,7 @@ function OpenFluidFilterPanel(player, entity)
 	chooseButton.elem_value = filterFluid
 end
 
-function CloseFluidFilterPanel(player, entity)
+function CloseFluidFilterPanel(player)
 	local guis = {
 		defines.relative_gui_type.entity_with_energy_source_gui,
 		defines.relative_gui_type.equipment_grid_gui,
@@ -861,7 +867,7 @@ function CloseWindow(player, element)
 end
 
 function OnWindowClosed(player, name)
-	if name == ENTITY_FRAME_NAME then
+	if name == ENTITY_FRAME_NAME or name == FILTER_FRAME_NAME then
 		if player.gui.screen[SIGNAL_FRAME_NAME] then
 			CloseWindow(player, player.gui.screen[SIGNAL_FRAME_NAME])
 		end
@@ -870,7 +876,7 @@ function OnWindowClosed(player, name)
 		global.guiState[player.index].entityWindow = nil
 		global.guiState[player.index] = nil
 
-		if entity and entity.valid then
+		if entity and entity.valid and global.openedEntities[entity.unit_number] then
 			RemoveValue(global.openedEntities[entity.unit_number].players, player.index)
 			if #(global.openedEntities[entity.unit_number].players) == 0 then
 				global.openedEntities[entity.unit_number] = nil
@@ -888,6 +894,11 @@ function OnWindowClosed(player, name)
 
 		global.guiState[player.index].signalWindow = nil
 	end
+end
+
+function CleanupPlayer(player)
+	CloseWindow(player, player.gui.screen[ENTITY_FRAME_NAME])
+	CloseFluidFilterPanel(player)
 end
 
 function RequestLocalizedSignalNames(player)
@@ -1206,13 +1217,15 @@ script.on_event(defines.events.on_gui_closed, IfGuiOpened(function(player, event
 			OnWindowClosed(player, event.element.name)
 			event.element.destroy()
 		end
+	elseif event.entity and event.entity == global.guiState[player.index].entity then
+		CloseFluidFilterPanel(player)
 	end
 end))
 
 script.on_event(defines.events.on_player_changed_position, IfGuiOpened(function(player, event)
 	local entity = global.guiState[player.index].entity
 	if not entity or not entity.valid or not player.can_reach_entity(entity) then
-		CloseWindow(player, player.gui.screen[ENTITY_FRAME_NAME])
+		CleanupPlayer(player)
 	end
 end))
 
@@ -1221,9 +1234,27 @@ script.on_event(ON_ENTITY_STATE_CHANGED, ForAllPlayersOpenedEntity(function(play
 end))
 
 script.on_event(ON_ENTITY_DESTROYED_CUSTOM, ForAllPlayersOpenedEntity(function(player, event)
-	CloseWindow(player, player.gui.screen[ENTITY_FRAME_NAME])
+	CleanupPlayer(player)
 	global.openedEntities[event.unit_number] = nil
 end))
+
+script.on_event(defines.events.on_player_died, IfGuiOpened(function(player, event)
+	CleanupPlayer(player)
+end))
+
+script.on_event(defines.events.on_player_left_game, IfGuiOpened(function(player, event)
+	CleanupPlayer(player)
+end))
+
+script.on_event(defines.events.on_player_removed, function(event)
+	if global.guiState[event.player_index] then
+		local entity = global.guiState[event.player_index].entity
+		if entity and entity.valid then
+			RemoveValue(global.openedEntities[entity.unit_number].players, event.player_index)
+		end
+	end
+	global.guiState[event.player_index] = nil
+end)
 
 script.on_event(defines.events.on_string_translated, function(event)
 	if not event.translated then
