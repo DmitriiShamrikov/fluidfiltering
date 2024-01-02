@@ -513,7 +513,7 @@ function UpdateState(pump)
 	local enable = ShouldEnablePump(pump)
 	if enable ~= pump.active then
 		pump.active = enable
-		game.print((enable and 'Enabling' or 'Disabling') .. ' pump ' .. pump.unit_number)
+		--game.print((enable and 'Enabling' or 'Disabling') .. ' pump ' .. pump.unit_number)
 	end
 end
 

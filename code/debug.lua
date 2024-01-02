@@ -47,7 +47,7 @@ function RepopulatePumps()
 	end
 end
 
-commands.add_command('ff.reset', nil, Clear)
+--commands.add_command('ff.reset', nil, Clear)
 commands.add_command('ff.print_pumps', nil, PrintPumps)
 commands.add_command('ff.print_wagons', nil, PrintWagons)
-commands.add_command('ff.populate_pumps', nil, RepopulatePumps)
+--commands.add_command('ff.populate_pumps', nil, RepopulatePumps)

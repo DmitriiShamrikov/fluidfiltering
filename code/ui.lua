@@ -915,7 +915,7 @@ end
 ----- Apply changes to the entity -----
 ---------------------------------------
 
-function SetFilter(player, entity, fluid)
+function SetFilter(entity, fluid)
 	if IsPump(entity) then
 		SetPumpFilter(entity, fluid)
 	else -- fluid-wagon
@@ -927,7 +927,7 @@ function SetFilter(player, entity, fluid)
 		end
 	end
 
-	player.print('Setting filter for entity ' .. entity.unit_number .. ': ' .. (fluid or 'none'))
+	--game.print('Setting filter for entity ' .. entity.unit_number .. ': ' .. (fluid or 'none'))
 end
 
 function ConnectToLogisiticNetwork(entity, connect)
@@ -945,7 +945,7 @@ function ConnectToLogisiticNetwork(entity, connect)
 	behavior.connect_to_logistic_network = connect
 end
 
-function SetCircuitMode(player, entity, circuitMode)
+function SetCircuitMode(entity, circuitMode)
 	if not IsPump(entity) then
 		return
 	end
@@ -973,7 +973,7 @@ function SetCircuitMode(player, entity, circuitMode)
 		end
 	end
 
-	player.print('Entity ' .. entity.unit_number .. (circuitMode == CircuitMode.SetFilter and ' will' or ' will not') .. ' get its filter from circuit network')
+	--game.print('Entity ' .. entity.unit_number .. (circuitMode == CircuitMode.SetFilter and ' will' or ' will not') .. ' get its filter from circuit network')
 end
 
 function SetEnabledCondition(entity, element, constantValue)
@@ -1121,7 +1121,7 @@ script.on_event(defines.events.on_gui_click, IfGuiOpened(function(player, event)
 			end
 
 			local setFilterFromCircuit = elements.circuitMode.setFilterRadio.state
-			SetCircuitMode(player, global.guiState[player.index].entity, circuitMode)
+			SetCircuitMode(global.guiState[player.index].entity, circuitMode)
 			UpdateCircuit(global.guiState[player.index].entity, circuitMode)
 			FillCondition(elements.circuitCondition, global.guiState[player.index].entity.get_or_create_control_behavior().circuit_condition.condition)
 			FillFilterButton(elements.chooseButton, global.guiState[player.index].entity, circuitMode == CircuitMode.SetFilter)
@@ -1133,7 +1133,7 @@ end))
 -- choose-elem-button
 script.on_event(defines.events.on_gui_elem_changed, IfGuiOpened(function(player, event)
 	if event.element.name == CHOOSE_FILTER_BUTTON_NAME then
-		SetFilter(player, global.guiState[player.index].entity, event.element.elem_value)
+		SetFilter(global.guiState[player.index].entity, event.element.elem_value)
 	end
 end))
 
@@ -1227,7 +1227,7 @@ end))
 
 script.on_event(defines.events.on_string_translated, function(event)
 	if not event.translated then
-		game.get_player(event.player_index).print('Failed to translate "' .. serpent.block(event.localised_string) .. '"')
+		log('Failed to translate "' .. serpent.block(event.localised_string) .. '"')
 		return
 	end
 
