@@ -158,7 +158,10 @@ function QueryEntities(filter, fn)
 end
 
 function PopulatePumps()
-	global.pumps = QueryEntities({type='pump'}, function(entity) return {entity, CircuitMode.None, {}} end)
+	global.pumps = QueryEntities({type='pump'}, function(entity)
+		local mode = IsConnectedToCircuitNetwork(entity) and CircuitMode.EnableDisable or CircuitMode.None
+		return {entity, mode, {}}
+	end)
 end
 
 function InitGlobal()

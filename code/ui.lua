@@ -1211,7 +1211,7 @@ end))
 
 script.on_event(defines.events.on_player_changed_position, IfGuiOpened(function(player, event)
 	local entity = global.guiState[player.index].entity
-	if not player.can_reach_entity(entity) then
+	if not entity or not entity.valid or not player.can_reach_entity(entity) then
 		CloseWindow(player, player.gui.screen[ENTITY_FRAME_NAME])
 	end
 end))
