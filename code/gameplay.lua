@@ -159,8 +159,7 @@ end
 
 function PopulatePumps()
 	global.pumps = QueryEntities({type='pump'}, function(entity)
-		local mode = IsConnectedToCircuitNetwork(entity) and CircuitMode.EnableDisable or CircuitMode.None
-		return {entity, mode, {}}
+		return {entity, CircuitMode.EnableDisable, {}}
 	end)
 end
 
@@ -179,6 +178,44 @@ function InitGlobal()
 
 	if global.openedEntities == nil then
 		global.openedEntities = {}
+	end
+end
+
+function OnConfigChanged()
+	InitGlobal()
+
+	for uid, entry in pairs(global.pumps) do
+		local pump = entry[1]
+		if not IsFilterEntity(pump) then
+			SetPumpFilter(pump, nil)
+			if entry[2] ~= CircuitMode.EnableDisable then
+				-- remove hacked circuit condition
+				local behavior = pump.get_control_behavior()
+				if behavior then
+					behavior.circuit_condition = nil
+				end
+			end
+			entry[2] = CircuitMode.EnableDisable
+
+			-- close ui
+			if global.openedEntities[uid] then
+				local ev = {unit_number=uid}
+				script.raise_event(ON_ENTITY_DESTROYED_CUSTOM, ev)
+			end
+		end
+	end
+
+	for uid, entry in pairs(global.wagons) do
+		local wagon = entry[1]
+		if not IsFilterEntity(wagon) then
+			global.wagons[uid] = nil
+
+			-- close ui
+			if global.openedEntities[uid] then
+				local ev = {unit_number=uid}
+				script.raise_event(ON_ENTITY_DESTROYED_CUSTOM, ev)
+			end
+		end
 	end
 end
 
@@ -231,7 +268,7 @@ function OnEntityBuilt(event)
 end
 
 function RegisterPump(entity)
-	global.pumps[entity.unit_number] = {entity, CircuitMode.None, {}}
+	global.pumps[entity.unit_number] = {entity, CircuitMode.EnableDisable, {}}
 	script.register_on_entity_destroyed(entity)
 end
 
@@ -246,17 +283,13 @@ function OnSettingsPasted(event)
 	if IsPump(event.source) and IsFilterPump(event.destination) then
 		-- that shouldn't noramlly happen, just being extra careful
 		if global.pumps[event.source.unit_number] == nil then
-			global.pumps[event.source.unit_number] = {event.source, CircuitMode.None, {}}
+			global.pumps[event.source.unit_number] = {event.source, CircuitMode.EnableDisable, {}}
 		end
 		if global.pumps[event.destination.unit_number] == nil then
-			global.pumps[event.destination.unit_number] = {event.destination, CircuitMode.None, {}}
+			global.pumps[event.destination.unit_number] = {event.destination, CircuitMode.EnableDisable, {}}
 		end
 
-		local circuitMode = global.pumps[event.source.unit_number][2]
-		if not IsFilterPump(event.source) and IsConnectedToCircuitNetwork(event.source) then
-			circuitMode = CircuitMode.EnableDisable
-		end
-		global.pumps[event.destination.unit_number][2] = circuitMode
+		global.pumps[event.destination.unit_number][2] = global.pumps[event.source.unit_number][2]
 
 		local filter = event.source.fluidbox.get_filter(1)
 		SetPumpFilter(event.destination, filter and filter.name or nil)
@@ -553,7 +586,7 @@ function UpdatePumps()
 end
 
 script.on_init(InitGlobal)
-script.on_configuration_changed(InitGlobal)
+script.on_configuration_changed(OnConfigChanged)
 
 script.on_event(defines.events.on_tick, function(event)
 	UpdatePumps()
