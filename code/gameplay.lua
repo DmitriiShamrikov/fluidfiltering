@@ -8,7 +8,7 @@ local g_RecentlyDeletedEntities = {} -- {{MapPosition, CircuitMode, filter (stri
 
 -- global.pumps - {unit-number => {entity, CircuitMode, {render-object-id, ...}}, ...} -- contains ALL pumps
 -- global.wagons - {unit-number => {entity, filter (string)}} -- contains only wagons with filters
--- global.guiState - {player-index => {entity=entity, entityWindow={}, signalWindow={}}}
+-- global.guiState - {player-index => {entity=entity, blueprint=item_stack, entityWindow={}, signalWindow={}}}
 -- global.openedEntities = {} -- {entity-id => {players={player-index, ...}, active=bool, status=int}}
 
 function GetSignalGroups()
@@ -316,13 +316,19 @@ function OnBlueprintSelected(event)
 	end
 
 	local bp = nil
-	if player.cursor_stack and player.cursor_stack.valid_for_read and player.cursor_stack.name == 'blueprint' then
+	if player.cursor_stack and player.cursor_stack.valid_for_read and player.cursor_stack.is_blueprint_setup() then
 		bp = player.cursor_stack -- this is for Ctrl+C
 	elseif player.blueprint_to_setup and player.blueprint_to_setup.valid_for_read then
 		bp = player.blueprint_to_setup -- this is for Create Blueprint button
+	elseif global.guiState[player.index] and global.guiState[player.index].blueprint then
+		bp = global.guiState[player.index].blueprint -- this is for updating an existing blueprint from inventory
+		global.guiState[player.index].blueprint = nil
+	else
+		return -- updating exisitng blueprint from library is not supported
 	end
 
-	-- we can handle both cases here because entities can't be added in blueprint configuration window
+	-- I don't care about on_player_configured_blueprint
+	-- because new entities cannot be added in the blueprint configuration window
 
 	for bpIndex, entity in ipairs(event.mapping.get()) do
 		if global.pumps[entity.unit_number] ~= nil then

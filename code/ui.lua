@@ -128,6 +128,12 @@ function ForAllPlayersOpenedEntity(fn)
 end
 
 function OnGuiOpened(event)
+	if event.gui_type == defines.gui_type.item and event.item and event.item.valid_for_read and event.item.is_blueprint_setup() then
+		global.guiState[event.player_index] = global.guiState[event.player_index] or {}
+		global.guiState[event.player_index].blueprint = nil
+		return
+	end
+
 	if event.gui_type ~= defines.gui_type.entity or event.entity == nil then
 		return
 	end
@@ -1219,6 +1225,8 @@ script.on_event(defines.events.on_gui_closed, IfGuiOpened(function(player, event
 		end
 	elseif event.entity and event.entity == global.guiState[player.index].entity then
 		CloseFluidFilterPanel(player)
+	elseif event.item and event.item.valid_for_read and event.item.is_blueprint_setup() then
+		global.guiState[event.player_index].blueprint = event.item
 	end
 end))
 
