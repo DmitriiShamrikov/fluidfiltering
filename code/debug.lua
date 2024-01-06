@@ -16,6 +16,7 @@ function PrintPumps()
 		local filter = pump.fluidbox.get_filter(1)
 		game.player.print('Pump ' .. uid .. ': ' .. (pump.active and 'enabled' or 'disabled') .. (filter and (' [' .. filter.name .. ']') or '') .. (entry[2] == CircuitMode.SetFilter and '[circuit]' or ''))
 	end
+	game.player.print('Total: ' .. tostring(table_size(global.pumps)))
 	game.player.print('========== END =========')
 end
 
@@ -25,11 +26,12 @@ function PrintWagons()
 		local filter = wagonEntry[2]
 		game.player.print('Wagon ' .. uid .. ': ' .. (filter or 'none'))
 	end
+	game.player.print('Total: ' .. tostring(table_size(global.wagons)))
 	game.player.print('========== END =========')
 end
 
 function RepopulatePumps()
-	global.pumps = QueryEntities({type='pump'}, function(entity) return {entity, CircuitMode.None, {}} end)
+	global.pumps = QueryEntities({type='pump'}, CreatePumpEntry)
 
 	local ids = rendering.get_all_ids('fluidfiltering')
 	local icons = {}

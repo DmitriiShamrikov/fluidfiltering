@@ -10,6 +10,7 @@ local g_RecentlyDeletedEntities = {} -- {{MapPosition, CircuitMode, filter (stri
 -- global.wagons - {unit-number => {entity, filter (string)}} -- contains only wagons with filters
 -- global.guiState - {player-index => {entity=entity, blueprint=item_stack, entityWindow={}, signalWindow={}}}
 -- global.openedEntities = {} -- {entity-id => {players={player-index, ...}, active=bool, status=int}}
+-- global.visitedSurfaces = {surface-idx => true}
 
 function GetSignalGroups()
 	if #(g_Signals) == 0 then
@@ -138,6 +139,17 @@ function IsConnectedToLogisticNetwork(entity)
 	return behavior and behavior.connect_to_logistic_network
 end
 
+function CreatePumpEntry(entity)
+	return {entity, CircuitMode.EnableDisable, {}}
+end
+
+function QuerySurfaceEntities(result, surface, filter, fn)
+	local entities = surface.find_entities_filtered{area=nil, name=filter.name, type=filter.type}
+	for _, entity in ipairs(entities) do
+		result[entity.unit_number] = fn and fn(entity) or entity
+	end
+end
+
 function QueryEntities(filter, fn)
 	local surfaces = {}
 	for _, player in ipairs(game.connected_players) do
@@ -148,22 +160,22 @@ function QueryEntities(filter, fn)
 
 	local result = {}
 	for surface, _ in pairs(surfaces) do
-		local entities = surface.find_entities_filtered{area=nil, name=filter.name, type=filter.type}
-		for _, entity in ipairs(entities) do
-			result[entity.unit_number] = fn and fn(entity) or entity
-		end
+		global.visitedSurfaces[surface.index] = true
+		QuerySurfaceEntities(result, surface, filter, fn)
 	end
 
 	return result
 end
 
 function PopulatePumps()
-	global.pumps = QueryEntities({type='pump'}, function(entity)
-		return {entity, CircuitMode.EnableDisable, {}}
-	end)
+	global.pumps = QueryEntities({type='pump'}, CreatePumpEntry)
 end
 
 function InitGlobal()
+	if global.visitedSurfaces == nil then
+		global.visitedSurfaces = {}
+	end
+
 	if global.pumps == nil then
 		PopulatePumps()
 	end
@@ -268,7 +280,7 @@ function OnEntityBuilt(event)
 end
 
 function RegisterPump(entity)
-	global.pumps[entity.unit_number] = {entity, CircuitMode.EnableDisable, {}}
+	global.pumps[entity.unit_number] = CreatePumpEntry(entity)
 	script.register_on_entity_destroyed(entity)
 end
 
@@ -283,10 +295,10 @@ function OnSettingsPasted(event)
 	if IsPump(event.source) and IsFilterPump(event.destination) then
 		-- that shouldn't noramlly happen, just being extra careful
 		if global.pumps[event.source.unit_number] == nil then
-			global.pumps[event.source.unit_number] = {event.source, CircuitMode.EnableDisable, {}}
+			global.pumps[event.source.unit_number] = CreatePumpEntry(event.source)
 		end
 		if global.pumps[event.destination.unit_number] == nil then
-			global.pumps[event.destination.unit_number] = {event.destination, CircuitMode.EnableDisable, {}}
+			global.pumps[event.destination.unit_number] = CreatePumpEntry(event.destination)
 		end
 
 		global.pumps[event.destination.unit_number][2] = global.pumps[event.source.unit_number][2]
@@ -651,6 +663,16 @@ end)
 
 script.on_event(defines.events.on_entity_settings_pasted, OnSettingsPasted)
 script.on_event(defines.events.on_player_setup_blueprint, OnBlueprintSelected)
+
+script.on_event(defines.events.on_player_changed_surface, function(event)
+	local player = game.get_player(event.player_index)
+	local surfaceIndex = player.surface.index
+	if not global.visitedSurfaces[surfaceIndex] then
+		global.visitedSurfaces[surfaceIndex] = true
+		local surface = game.get_surface(surfaceIndex)
+		QuerySurfaceEntities(global.pumps, surface, {type='pump'}, CreatePumpEntry)
+	end
+end)
 
 script.on_event(BUILD_INPUT_EVENT, function(event)
 	g_InputEvents[event.player_index] = g_InputEvents[event.player_index] or {}
