@@ -147,6 +147,7 @@ function QuerySurfaceEntities(result, surface, filter, fn)
 	local entities = surface.find_entities_filtered{area=nil, name=filter.name, type=filter.type}
 	for _, entity in ipairs(entities) do
 		result[entity.unit_number] = fn and fn(entity) or entity
+		UpdateFilterIcon(entity, result[entity.unit_number])
 	end
 end
 
@@ -261,7 +262,7 @@ function OnEntityBuilt(event)
 					SetPumpFilter(event.created_entity, filter)
 				else
 					-- when entity is revived filter is not passed through ghost tags, but restored by fluidbox directly
-					UpdateFilterIcon(event.created_entity)
+					UpdateFilterIcon(event.created_entity, global.pumps[event.created_entity.unit_number])
 				end
 
 				local circuitMode = tags['circuit_mode']
@@ -524,11 +525,11 @@ function AddFilterIcon(entity, fluid)
 	}
 end
 
-function UpdateFilterIcon(pump)
+function UpdateFilterIcon(pump, pumpEntry)
 	local filter = pump.fluidbox.get_filter(1)
 	local fluid = filter and filter.name or nil
 	if fluid then
-		local ids = global.pumps[pump.unit_number][3]
+		local ids = pumpEntry[3]
 		if #(ids) > 0 then
 			local sprite = 'fluid/' .. fluid
 			if rendering.get_sprite(ids[2]) ~= sprite then
@@ -536,13 +537,13 @@ function UpdateFilterIcon(pump)
 				ids[2] = rendering.draw_sprite{sprite='fluid/' .. fluid, x_scale=0.47, y_scale=0.47, target=pump, surface=pump.surface, only_in_alt_mode=true}
 			end
 		else
-			global.pumps[pump.unit_number][3] = AddFilterIcon(pump, fluid)
+			pumpEntry[3] = AddFilterIcon(pump, fluid)
 		end
 	else
-		for _, id in pairs(global.pumps[pump.unit_number][3]) do
+		for _, id in pairs(pumpEntry[3]) do
 			rendering.destroy(id)
 		end
-		global.pumps[pump.unit_number][3] = {}
+		pumpEntry[3] = {}
 	end
 end
 
@@ -556,7 +557,7 @@ function SetPumpFilter(pump, fluid)
 		else
 			fb.set_filter(1, {name=fluid, force=true})
 		end
-		UpdateFilterIcon(pump)
+		UpdateFilterIcon(pump, global.pumps[pump.unit_number])
 	end
 end
 
