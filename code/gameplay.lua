@@ -13,12 +13,12 @@ local g_RecentlyDeletedEntities = {} -- {{MapPosition, CircuitMode, filter (stri
 -- global.visitedSurfaces = {surface-idx => true}
 
 function GetSignalGroups()
-	if #(g_Signals) == 0 then
+	if table_size(g_Signals) == 0 then
 		for _, group in pairs(game.item_group_prototypes) do
 			local signals = {}
 			for _, subgroup in pairs(group.subgroups) do
 				local prototypes = game.get_filtered_item_prototypes({{filter = 'subgroup', subgroup = subgroup.name}})
-				if #(prototypes) > 0 then
+				if table_size(prototypes) > 0 then
 					local subsignals = {}
 					for _, proto in pairs(prototypes) do
 						if not proto.has_flag('hidden') then
@@ -32,7 +32,7 @@ function GetSignalGroups()
 				end
 	
 				prototypes = game.get_filtered_fluid_prototypes({{filter = 'subgroup', subgroup = subgroup.name}})
-				if #(prototypes) > 0 then
+				if table_size(prototypes) > 0 then
 					local subsignals = {}
 					for _, proto in pairs(prototypes) do
 						if not proto.hidden then
@@ -476,7 +476,7 @@ function ShouldEnablePump(pump)
 		end
 	end
 
-	local pumpFluid = #(pumpFbox) > 0 and pumpFbox[1] ~=nil and pumpFbox[1].amount > 0 and pumpFbox[1].name or nil
+	local pumpFluid = table_size(pumpFbox) > 0 and pumpFbox[1] ~=nil and pumpFbox[1].amount > 0 and pumpFbox[1].name or nil
 	if pumpFluid ~= nil then
 		local outputPos = GetOutputPosition(pump)
 		if next(outputPos) ~= nil then
@@ -497,7 +497,7 @@ end
 
 function FindASignal(network)
 	if network and network.signals then
-		for i = 1, #(network.signals) do
+		for i = 1, table_size(network.signals) do
 			if network.signals[i].count > 0 and network.signals[i].signal.type == 'fluid' then
 				return network.signals[i].signal.name
 			end

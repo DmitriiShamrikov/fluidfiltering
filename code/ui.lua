@@ -717,7 +717,7 @@ function CreateSignalChooseWindow(player, elements, includeSpecialSignals, inclu
 	local frameHight =
 		8 +  -- frame.top_padding (it's 4 in the style...)
 		28 + -- titleFlow (button.minimal_height or probably label height)
-		72 * math.ceil(#(elements.groupsTable.children) / SIGNALS_GROUP_ROW_SIZE) + -- filter_group_button_tab.size
+		72 * math.ceil(table_size(elements.groupsTable.children) / SIGNALS_GROUP_ROW_SIZE) + -- filter_group_button_tab.size
 		6 +  -- filter_frame.top_padding
 		4 +  -- filter_scroll_pane.top_padding
 		signalTableHeight +
@@ -752,7 +752,7 @@ function FilterSignals(player, elements, pattern)
 		local hasSignalsInGroup = false
 		local numVisibleInSubgroup = 0
 
-		local numChildren = #(table.children)
+		local numChildren = table_size(table.children)
 		local i = 1
 		while i <= numChildren do
 			local widget = table.children[i]
