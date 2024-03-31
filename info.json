@@ -6,5 +6,5 @@
 	"contact": "blackoverlordd@gmail.com",
 	"factorio_version": "1.1",
 	"dependencies": ["base >= 1.1.83"],
-	"description": "Adds ability set filter for pumps, works the same as filter for inserters. Can be set from circuit as well.\nAdds ability to set filter for fluid wagons."
+	"description": "Adds ability to set filter for pumps, works the same as filter for inserters. Can be set from circuit network as well.\nAdds ability to set filter for fluid wagons."
 }
