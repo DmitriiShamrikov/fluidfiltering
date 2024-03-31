@@ -49,7 +49,88 @@ function RepopulatePumps()
 	end
 end
 
+function ExportSaveData()
+	local data = {
+		visitedSurfaces = global.visitedSurfaces,
+		pumps = global.pumps,
+		wagons = global.wagons,
+		openedEntities = global.openedEntities
+	}
+
+	game.write_file('savedata.json', game.table_to_json(data))
+end
+
+function ImportSaveData(cmd)
+	if cmd.parameter == nil or cmd.parameter == '' then
+		game.player.print('No data provided')
+		return
+	end
+
+	game.player.print('Received ' .. #(cmd.parameter) .. ' bytes of data')
+
+	local data = game.json_to_table(cmd.parameter)
+	if data then
+		local entities = {}
+		local numSurfaces = 0
+		for name, surface in pairs(game.surfaces) do
+			local surfEntities = surface.find_entities()
+			for idx, ent in pairs(surfEntities) do
+				if ent and ent.unit_number then
+					entities[ent.unit_number] = ent
+				end
+			end
+			numSurfaces = numSurfaces + 1
+		end
+
+		game.player.print('Searching through ' .. table_size(entities) .. ' entities on ' .. numSurfaces .. ' surfaces')
+
+		if data.pumps then
+			for key, value in pairs(data.pumps) do
+				uid = tonumber(key)
+				if entities[uid] then
+					global.pumps[uid] = {entities[uid], value[2], value[3]}
+				else
+					game.player.print('Pump ' .. uid .. ' is not found!')
+				end
+			end
+			game.player.print('Imported ' .. table_size(global.pumps) .. ' pumps')
+		end
+		if data.wagons then
+			for key, value in pairs(data.wagons) do
+				uid = tonumber(key)
+				if entities[uid] then
+					global.wagons[uid] = {entities[uid], value[2]}
+				else
+					game.player.print('Wagon ' .. uid .. ' is not found!')
+				end
+			end
+			game.player.print('Imported ' .. table_size(global.wagons) .. ' wagons')
+		end
+		if data.openedEntities then
+			for key, value in pairs(data.openedEntities) do
+				if table_size(value.players) > 0 then
+					uid = tonumber(key)
+					if entities[uid] then
+						global.openedEntities[uid] = value
+					else
+						game.player.print('Entity ' .. uid .. ' is not found!')
+					end
+				end
+			end
+			game.player.print('Imported ' .. table_size(global.openedEntities) .. ' openedEntities')
+		end
+		if data.visitedSurfaces then
+			global.visitedSurfaces = data.visitedSurfaces
+			game.player.print('Imported ' .. table_size(global.visitedSurfaces) .. ' visitedSurfaces')
+		end
+	else
+		game.player.print('Failed to parse data')
+	end
+end
+
 --commands.add_command('ff.reset', nil, Clear)
 commands.add_command('ff.print_pumps', nil, PrintPumps)
 commands.add_command('ff.print_wagons', nil, PrintWagons)
 --commands.add_command('ff.populate_pumps', nil, RepopulatePumps)
+--commands.add_command('ff.export', nil, ExportSaveData)
+--commands.add_command('ff.import', nil, ImportSaveData)
