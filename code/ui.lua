@@ -128,7 +128,7 @@ function ForAllPlayersOpenedEntity(fn)
 end
 
 function OnGuiOpened(event)
-	if event.gui_type == defines.gui_type.item and event.item and event.item.valid_for_read and event.item.is_blueprint_setup() then
+	if event.gui_type == defines.gui_type.item and event.item and event.item.valid_for_read and event.item.is_blueprint and event.item.is_blueprint_setup() then
 		global.guiState[event.player_index] = global.guiState[event.player_index] or {}
 		global.guiState[event.player_index].blueprint = nil
 		return

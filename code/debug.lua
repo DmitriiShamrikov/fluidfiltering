@@ -120,7 +120,10 @@ function ImportSaveData(cmd)
 			game.player.print('Imported ' .. table_size(global.openedEntities) .. ' openedEntities')
 		end
 		if data.visitedSurfaces then
-			global.visitedSurfaces = data.visitedSurfaces
+			for key, value in pairs(data.visitedSurfaces) do
+				id = tonumber(key)
+				global.visitedSurfaces[id] = value
+			end
 			game.player.print('Imported ' .. table_size(global.visitedSurfaces) .. ' visitedSurfaces')
 		end
 	else
