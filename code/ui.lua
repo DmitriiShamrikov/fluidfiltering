@@ -675,8 +675,7 @@ function CreateSignalChooseWindow(player, elements, includeSpecialSignals, inclu
 				if not signal.special or includeSpecialSignals then
 					numSignalsInSubgroup = numSignalsInSubgroup + 1
 					local tags = {
-						type='signal',
-						loc_id=GetSignalLocalizedString(signal)[1]
+						type='signal'
 					}
 					local signalButton = signalsTable.add{type='choose-elem-button', elem_type='signal', signal=signal, tags=tags, style='slot_button'}
 					signalButton.locked = true
@@ -757,7 +756,12 @@ function FilterSignals(player, elements, pattern)
 		while i <= numChildren do
 			local widget = table.children[i]
 			if widget.type == 'choose-elem-button' then
-				widget.visible = g_LocalizedSignalNames[player.index][widget.tags.loc_id]:find(pattern, 1, true) ~= nil
+				if pattern == '' then
+					widget.visible = true
+				else
+					local locName = widget.elem_value and g_LocalizedSignalNames[player.index][widget.elem_value.name] or nil
+					widget.visible = locName and locName:find(pattern, 1, true) ~= nil
+				end
 				if widget.visible then
 					hasSignalsInGroup = true
 					numVisibleInSubgroup = numVisibleInSubgroup + 1
@@ -913,18 +917,20 @@ function RequestLocalizedSignalNames(player)
 	end
 
 	local strings = {}
+	local signals = {}
 	local groups = GetSignalGroups()
 	for _, subgroups in pairs(groups) do
 		for _, subgroup in pairs(subgroups) do
 			for _, signal in pairs(subgroup) do
 				table.insert(strings, GetSignalLocalizedString(signal))
+				table.insert(signals, signal.name)
 			end
 		end
 	end
 
 	local ids = player.request_translations(strings)
-	for _, id in pairs(ids) do
-		g_LocalizationRequests[id] = true
+	for i, id in pairs(ids) do
+		g_LocalizationRequests[id] = signals[i]
 	end
 end
 
@@ -1210,6 +1216,7 @@ script.on_event(defines.events.on_gui_closed, IfGuiOpened(function(player, event
 		if player.gui.screen[SIGNAL_FRAME_NAME] then
 			local elements = global.guiState[player.index].signalWindow
 			if elements.searchField.visible then
+				elements.searchButton.toggled = false
 				elements.searchField.visible = false
 				if elements.searchField.text ~= '' or elements.searchField.tags.dirty then
 					FilterSignals(player, elements, '')
@@ -1265,19 +1272,20 @@ script.on_event(defines.events.on_player_removed, function(event)
 end)
 
 script.on_event(defines.events.on_string_translated, function(event)
-	if not event.translated then
-		log('Failed to translate "' .. serpent.block(event.localised_string) .. '"')
+	if g_LocalizationRequests[event.id] == nil then
 		return
 	end
 
-	if not g_LocalizationRequests[event.id] then
-		return
-	end
-
+	local signal = g_LocalizationRequests[event.id]
 	g_LocalizationRequests[event.id] = nil
 
-	if g_LocalizedSignalNames[event.player_index] == nil then
-		g_LocalizedSignalNames[event.player_index] = {}
+	g_LocalizedSignalNames[event.player_index] = g_LocalizedSignalNames[event.player_index] or {}
+
+	local result = signal
+	if event.translated then
+		result = event.result:lower()
+	else
+		log('Failed to translate ' .. serpent.line(event.localised_string))
 	end
-	g_LocalizedSignalNames[event.player_index][event.localised_string[1]] = event.result:lower()
+	g_LocalizedSignalNames[event.player_index][signal] = result
 end)
