@@ -4,13 +4,13 @@ local g_InputEvents = {} -- {player-index => {event-name => last-tick-fired}}
 local g_PumpConnectionsCache = {}
 local g_FilterPrototypesCache = nil
 local g_Signals = {} -- {group => {{SignalID},{SignalID}}}
-local g_RecentlyDeletedEntities = {} -- {{MapPosition, CircuitMode, filter (string)}, ...}
 
 -- global.pumps - {unit-number => {entity, CircuitMode, {render-object-id, ...}}, ...} -- contains ALL pumps
 -- global.wagons - {unit-number => {entity, filter (string)}} -- contains only wagons with filters
 -- global.guiState - {player-index => {entity=entity, blueprint=item_stack, entityWindow={}, signalWindow={}}}
 -- global.openedEntities = {} -- {entity-id => {players={player-index, ...}, active=bool, status=int}}
 -- global.visitedSurfaces = {surface-idx => true}
+-- global.recentlyDeletedEntities = {{MapPosition, CircuitMode, filter (string)}, ...}
 
 function GetSignalGroups()
 	if table_size(g_Signals) == 0 then
@@ -173,25 +173,16 @@ function PopulatePumps()
 end
 
 function InitGlobal()
-	if global.visitedSurfaces == nil then
-		global.visitedSurfaces = {}
-	end
+	global.visitedSurfaces = global.visitedSurfaces or {}
 
 	if global.pumps == nil then
 		PopulatePumps()
 	end
 
-	if global.wagons == nil then
-		global.wagons = {}
-	end
-
-	if global.guiState == nil then
-		global.guiState = {}
-	end
-
-	if global.openedEntities == nil then
-		global.openedEntities = {}
-	end
+	global.wagons = global.wagons or {}
+	global.guiState = global.guiState or {}
+	global.openedEntities = global.openedEntities or {}
+	global.recentlyDeletedEntities = global.recentlyDeletedEntities or {}
 end
 
 function OnConfigChanged()
@@ -238,7 +229,7 @@ function OnEntityBuilt(event)
 	-- Unfortunately, this doesn't work when the game is paused in editor, because tick counter is not increased
 	local placedByPlayer = event.name == defines.events.on_built_entity
 	local placedByDying = event.name == defines.events.on_post_entity_died
-	local clickedToBuild = placedByPlayer and (g_InputEvents[event.player_index][BUILD_GHOST_INPUT_EVENT] == event.tick or g_InputEvents[event.player_index][BUILD_INPUT_EVENT] == event.tick)
+	local clickedToBuild = placedByPlayer and g_InputEvents[event.player_index] and (g_InputEvents[event.player_index][BUILD_GHOST_INPUT_EVENT] == event.tick or g_InputEvents[event.player_index][BUILD_INPUT_EVENT] == event.tick)
 	local placedByUndo = placedByPlayer and not clickedToBuild
 	local historyEntry = (placedByUndo or placedByDying) and PopRecentlyDeletedEntry(event.created_entity.position) or nil
 	local tags = event.created_entity.tags or event.tags or {}
@@ -359,8 +350,8 @@ function OnBlueprintSelected(event)
 end
 
 function AddToRecentlyDeleted(entity)
-	if #(g_RecentlyDeletedEntities) == MAX_DELETED_ENTITIES then
-		table.remove(g_RecentlyDeletedEntities, 1)
+	if #(global.recentlyDeletedEntities) == MAX_DELETED_ENTITIES then
+		table.remove(global.recentlyDeletedEntities, 1)
 	end
 
 	local entry = {pos=entity.position}
@@ -377,15 +368,15 @@ function AddToRecentlyDeleted(entity)
 		entry.filter = entity.tags['filter']
 	end
 
-	table.insert(g_RecentlyDeletedEntities, entry)
+	table.insert(global.recentlyDeletedEntities, entry)
 end
 
 function PopRecentlyDeletedEntry(pos)
-	for i = #(g_RecentlyDeletedEntities), 1, -1 do
-		local entry = g_RecentlyDeletedEntities[i]
+	for i = #(global.recentlyDeletedEntities), 1, -1 do
+		local entry = global.recentlyDeletedEntities[i]
 		if math.abs(entry.pos.x - pos.x) < 0.001 and math.abs(entry.pos.y - pos.y) < 0.001 then
-			for j = #(g_RecentlyDeletedEntities), i, -1 do
-				table.remove(g_RecentlyDeletedEntities, j)
+			for j = #(global.recentlyDeletedEntities), i, -1 do
+				table.remove(global.recentlyDeletedEntities, j)
 			end
 			return entry
 		end

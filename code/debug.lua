@@ -54,7 +54,8 @@ function ExportSaveData()
 		visitedSurfaces = global.visitedSurfaces,
 		pumps = global.pumps,
 		wagons = global.wagons,
-		openedEntities = global.openedEntities
+		openedEntities = global.openedEntities,
+		recentlyDeletedEntities = global.recentlyDeletedEntities
 	}
 
 	game.write_file('savedata.json', game.table_to_json(data))
@@ -125,6 +126,10 @@ function ImportSaveData(cmd)
 				global.visitedSurfaces[id] = value
 			end
 			game.player.print('Imported ' .. table_size(global.visitedSurfaces) .. ' visitedSurfaces')
+		end
+		if data.recentlyDeletedEntities then
+			global.recentlyDeletedEntities = data.recentlyDeletedEntities
+			game.player.print('Imported ' .. #(global.recentlyDeletedEntities) .. ' recentlyDeletedEntities')
 		end
 	else
 		game.player.print('Failed to parse data')
