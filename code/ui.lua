@@ -128,10 +128,21 @@ function ForAllPlayersOpenedEntity(fn)
 end
 
 function OnGuiOpened(event)
-	if event.gui_type == defines.gui_type.item and event.item and event.item.valid_for_read and event.item.is_blueprint and event.item.is_blueprint_setup() then
+	local isBlueprintSetup = event.gui_type == defines.gui_type.item and event.item and event.item.valid_for_read and event.item.is_blueprint and event.item.is_blueprint_setup()
+	local isBlueprintContentSelection = isBlueprintSetup and global.guiState[event.player_index] and global.guiState[event.player_index].blueprint == event.item
+	
+	if isBlueprintSetup then
+		-- this is to save the blueprint when the window is closed
+		-- unfortunately it's not possible to know whether the window is just closed or because of new content selection 
 		global.guiState[event.player_index] = global.guiState[event.player_index] or {}
+		if isBlueprintContentSelection then
+			-- don't do anything here beacuse OnBlueprintSelected is called later this frame
+			-- and global.guiState[event.player_index].blueprint will be consumed from there
+			return
+		end
+	elseif global.guiState[event.player_index] then
+		-- forget saved blueprint if any other window is opened
 		global.guiState[event.player_index].blueprint = nil
-		return
 	end
 
 	if event.gui_type ~= defines.gui_type.entity or event.entity == nil then
@@ -1232,7 +1243,7 @@ script.on_event(defines.events.on_gui_closed, IfGuiOpened(function(player, event
 		end
 	elseif event.entity and event.entity == global.guiState[player.index].entity then
 		CloseFluidFilterPanel(player)
-	elseif event.item and event.item.valid_for_read and event.item.is_blueprint_setup() then
+	elseif event.item and event.item.valid_for_read and event.item.is_blueprint and event.item.is_blueprint_setup() then
 		global.guiState[event.player_index].blueprint = event.item
 	end
 end))
