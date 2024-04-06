@@ -320,7 +320,7 @@ function OnBlueprintSelected(event)
 	end
 
 	local bp = nil
-	if player.cursor_stack and player.cursor_stack.valid_for_read and player.cursor_stack.is_blueprint_setup() then
+	if player.cursor_stack and player.cursor_stack.valid_for_read and player.cursor_stack.is_blueprint and player.cursor_stack.is_blueprint_setup() then
 		bp = player.cursor_stack -- this is for Ctrl+C
 	elseif player.blueprint_to_setup and player.blueprint_to_setup.valid_for_read then
 		bp = player.blueprint_to_setup -- this is for Create Blueprint button
