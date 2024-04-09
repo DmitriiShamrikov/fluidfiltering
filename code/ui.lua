@@ -1223,7 +1223,7 @@ script.on_event(FOCUS_SEARCH_INPUT_EVENT, IfGuiOpened(function(player, event)
 end))
 
 script.on_event(defines.events.on_gui_closed, IfGuiOpened(function(player, event)
-	if event.element then
+	if event.element and event.element.name == ENTITY_FRAME_NAME then
 		if player.gui.screen[SIGNAL_FRAME_NAME] then
 			local elements = global.guiState[player.index].signalWindow
 			if elements.searchField.visible then
