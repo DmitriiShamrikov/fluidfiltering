@@ -609,6 +609,10 @@ script.on_event(defines.events.script_raised_built, function(event)
 	local ev = {created_entity=event.entity, tick=event.tick, name=event.name}
 	OnEntityBuilt(ev)
 end, entityFilters)
+script.on_event(defines.events.script_raised_revive, function(event)
+	local ev = {created_entity=event.entity, tick=event.tick, name=event.name}
+	OnEntityBuilt(ev)
+end, entityFilters)
 
 script.on_event(defines.events.on_post_entity_died, function(event)
 	if event.ghost and IsFilterPump(event.prototype) then
@@ -616,6 +620,12 @@ script.on_event(defines.events.on_post_entity_died, function(event)
 		OnEntityBuilt(ev)
 	end
 end, {{filter='type', type='pump'}})
+
+script.on_event(defines.events.on_entity_cloned, function(event)
+	local ev = {created_entity=event.destination, tick=event.tick, name=event.name}
+	OnEntityBuilt(ev)
+	OnSettingsPasted(event)
+end, entityFilters)
 
 script.on_event(defines.events.on_entity_destroyed, function(event)
 	if event.unit_number then
