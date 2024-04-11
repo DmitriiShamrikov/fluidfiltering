@@ -509,10 +509,18 @@ function GetFilterFromCircuitNetwork(pump)
 	return signal
 end
 
+function AddBackgroundIcon(entity)
+	return rendering.draw_sprite{sprite='utility/entity_info_dark_background', x_scale=0.5, y_scale=0.5, target=entity, surface=entity.surface, only_in_alt_mode=true}
+end
+
+function AddFluidIcon(entity, fluid)
+	return rendering.draw_sprite{sprite='fluid/' .. fluid, x_scale=0.47, y_scale=0.47, target=entity, surface=entity.surface, only_in_alt_mode=true}
+end
+
 function AddFilterIcon(entity, fluid)
 	return {
-		rendering.draw_sprite{sprite='utility/entity_info_dark_background', x_scale=0.5, y_scale=0.5, target=entity, surface=entity.surface, only_in_alt_mode=true},
-		rendering.draw_sprite{sprite='fluid/' .. fluid, x_scale=0.47, y_scale=0.47, target=entity, surface=entity.surface, only_in_alt_mode=true}
+		AddBackgroundIcon(entity),
+		AddFluidIcon(entity, fluid)
 	}
 end
 
@@ -521,14 +529,19 @@ function UpdateFilterIcon(pump, pumpEntry)
 	local fluid = filter and filter.name or nil
 	if fluid then
 		local ids = pumpEntry[3]
-		if #(ids) > 0 then
-			local sprite = 'fluid/' .. fluid
-			if rendering.get_sprite(ids[2]) ~= sprite then
-				rendering.destroy(ids[2])
-				ids[2] = rendering.draw_sprite{sprite='fluid/' .. fluid, x_scale=0.47, y_scale=0.47, target=pump, surface=pump.surface, only_in_alt_mode=true}
-			end
-		else
-			pumpEntry[3] = AddFilterIcon(pump, fluid)
+
+		if ids[1] == nil then
+			ids[1] = AddBackgroundIcon(pump)
+		end
+
+		local sprite = 'fluid/' .. fluid
+		if ids[2] and rendering.get_sprite(ids[2]) ~= sprite then
+			rendering.destroy(ids[2])
+			ids[2] = nil
+		end
+
+		if ids[2] == nil then
+			ids[2] = AddFluidIcon(pump, fluid)
 		end
 	else
 		for _, id in pairs(pumpEntry[3]) do
