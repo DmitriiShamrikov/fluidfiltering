@@ -1,23 +1,25 @@
 function Clear()
 	global.pumps = {}
-	game.player.print('Pumps are cleared')
-
 	global.wagons = {}
-	game.player.print('Wagons are cleared')
+	global.guiState = {}
+	global.openedEntities = {}
+	global.recentlyDeletedEntities = {}
+	global.visitedSurfaces = {}
 
 	g_PumpConnectionsCache = {}
-	game.player.print('Cache is cleared')
 end
 
 function PrintPumps()
-	game.player.print('=== Registered pumps ===')
-	for uid, entry in pairs(global.pumps) do
-		local pump = entry[1]
-		local filter = pump.fluidbox.get_filter(1)
-		game.player.print('Pump ' .. uid .. ': ' .. (pump.active and 'enabled' or 'disabled') .. (filter and (' [' .. filter.name .. ']') or '') .. (entry[2] == CircuitMode.SetFilter and '[circuit]' or ''))
+	if global.pumps then
+		game.player.print('=== Registered pumps ===')
+		for uid, entry in pairs(global.pumps) do
+			local pump = entry[1]
+			local filter = pump.fluidbox.get_filter(1)
+			game.player.print('Pump ' .. uid .. ': ' .. (pump.active and 'enabled' or 'disabled') .. (filter and (' [' .. filter.name .. ']') or '') .. (entry[2] == CircuitMode.SetFilter and '[circuit]' or ''))
+		end
+		game.player.print('Total: ' .. tostring(table_size(global.pumps)))
+		game.player.print('========== END =========')
 	end
-	game.player.print('Total: ' .. tostring(table_size(global.pumps)))
-	game.player.print('========== END =========')
 end
 
 function PrintWagons()
@@ -31,21 +33,64 @@ function PrintWagons()
 end
 
 function RepopulatePumps()
-	global.pumps = QueryEntities({type='pump'}, CreatePumpEntry)
-
 	local ids = rendering.get_all_ids('fluidfiltering')
 	local icons = {}
 	for _, id in pairs(ids) do
 		local target = rendering.get_target(id)
 		if target and target.entity then
-			local pumpEntry = global.pumps[target.entity.unit_number]
-			if pumpEntry then
-				local sprite = rendering.get_sprite(id)
-				local prefix = 'fluid/'
-				local idx = sprite:sub(#prefix) == prefix and 2 or 1
-				table.insert(pumpEntry[3], id, idx)
+			local sprite = rendering.get_sprite(id)
+			local prefix = 'fluid/'
+			local idx = sprite:sub(1, #prefix) == prefix and 2 or 1
+
+			local uid = target.entity.unit_number
+			icons[uid] = icons[uid] or {}
+			icons[uid][idx] = id
+		end
+	end
+
+	local missingPumpsNum = 0
+	local mismatchedIconPumps = 0
+	global.pumps = global.pumps or {}
+	for name, surface in pairs(game.surfaces) do
+		local entities = surface.find_entities_filtered{area=nil, type='pump'}
+		for _, entity in ipairs(entities) do
+			local entry = global.pumps[entity.unit_number]
+			if entry == nil then
+				entry = CreatePumpEntry(entity)
+				entry[3] = icons[entity.unit_number] or {}
+				UpdateFilterIcon(entity, entry)
+				global.pumps[entity.unit_number] = entry
+				missingPumpsNum = missingPumpsNum + 1
+			elseif icons[entity.unit_number] then
+				local shouldUpdateIcons = false
+				local iconEntry = icons[entity.unit_number]
+				for i = 1,2 do
+					if iconEntry[i] ~= entry[3][i] then
+						if entry[3][i] then
+							if iconEntry[i] then
+								rendering.destroy(iconEntry[i])
+								shouldUpdateIcons = true
+							end
+						else
+							entry[3][i] = iconEntry[i]
+							shouldUpdateIcons = true
+						end
+					end
+				end
+				if shouldUpdateIcons then
+					UpdateFilterIcon(entity, entry)
+					mismatchedIconPumps = mismatchedIconPumps + 1
+				end
 			end
 		end
+	end
+
+	if missingPumpsNum > 0 then
+		game.player.print('Found ' .. tostring(missingPumpsNum) .. ' missing pumps')
+	end
+
+	if mismatchedIconPumps > 0 then
+		game.player.print('Updated icons for ' .. tostring(mismatchedIconPumps) .. ' pumps')
 	end
 end
 
@@ -139,6 +184,6 @@ end
 --commands.add_command('ff.reset', nil, Clear)
 commands.add_command('ff.print_pumps', nil, PrintPumps)
 commands.add_command('ff.print_wagons', nil, PrintWagons)
---commands.add_command('ff.populate_pumps', nil, RepopulatePumps)
+commands.add_command('ff.repopulate_pumps', nil, RepopulatePumps)
 --commands.add_command('ff.export', nil, ExportSaveData)
 --commands.add_command('ff.import', nil, ImportSaveData)
