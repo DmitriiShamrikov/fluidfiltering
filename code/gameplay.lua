@@ -9,7 +9,6 @@ local g_Signals = {} -- {group => {{SignalID},{SignalID}}}
 -- global.wagons - {unit-number => {entity, filter (string)}} -- contains only wagons with filters
 -- global.guiState - {player-index => {entity=entity, blueprint=item_stack, entityWindow={}, signalWindow={}}}
 -- global.openedEntities = {} -- {entity-id => {players={player-index, ...}, active=bool, status=int}}
--- global.visitedSurfaces = {surface-idx => true}
 -- global.recentlyDeletedEntities = {{MapPosition, CircuitMode, filter (string)}, ...}
 
 function GetSignalGroups()
@@ -152,19 +151,10 @@ function QuerySurfaceEntities(result, surface, filter, fn)
 end
 
 function QueryEntities(filter, fn)
-	local surfaces = {}
-	for _, player in ipairs(game.connected_players) do
-		if player ~= nil and player.surface ~= nil then
-			surfaces[player.surface] = true
-		end
-	end
-
 	local result = {}
-	for surface, _ in pairs(surfaces) do
-		global.visitedSurfaces[surface.index] = true
+	for name, surface in pairs(game.surfaces) do
 		QuerySurfaceEntities(result, surface, filter, fn)
 	end
-
 	return result
 end
 
@@ -173,8 +163,6 @@ function PopulatePumps()
 end
 
 function InitGlobal()
-	global.visitedSurfaces = global.visitedSurfaces or {}
-
 	if global.pumps == nil then
 		PopulatePumps()
 	end
@@ -678,16 +666,6 @@ end)
 
 script.on_event(defines.events.on_entity_settings_pasted, OnSettingsPasted)
 script.on_event(defines.events.on_player_setup_blueprint, OnBlueprintSelected)
-
-script.on_event(defines.events.on_player_changed_surface, function(event)
-	local player = game.get_player(event.player_index)
-	local surfaceIndex = player.surface.index
-	if not global.visitedSurfaces[surfaceIndex] then
-		global.visitedSurfaces[surfaceIndex] = true
-		local surface = game.get_surface(surfaceIndex)
-		QuerySurfaceEntities(global.pumps, surface, {type='pump'}, CreatePumpEntry)
-	end
-end)
 
 script.on_event(BUILD_INPUT_EVENT, function(event)
 	g_InputEvents[event.player_index] = g_InputEvents[event.player_index] or {}

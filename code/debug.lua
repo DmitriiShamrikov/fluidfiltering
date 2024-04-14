@@ -4,7 +4,6 @@ function Clear()
 	global.guiState = {}
 	global.openedEntities = {}
 	global.recentlyDeletedEntities = {}
-	global.visitedSurfaces = {}
 
 	g_PumpConnectionsCache = {}
 end
@@ -96,7 +95,6 @@ end
 
 function ExportSaveData()
 	local data = {
-		visitedSurfaces = global.visitedSurfaces,
 		pumps = global.pumps,
 		wagons = global.wagons,
 		openedEntities = global.openedEntities,
@@ -164,13 +162,6 @@ function ImportSaveData(cmd)
 				end
 			end
 			game.player.print('Imported ' .. table_size(global.openedEntities) .. ' openedEntities')
-		end
-		if data.visitedSurfaces then
-			for key, value in pairs(data.visitedSurfaces) do
-				id = tonumber(key)
-				global.visitedSurfaces[id] = value
-			end
-			game.player.print('Imported ' .. table_size(global.visitedSurfaces) .. ' visitedSurfaces')
 		end
 		if data.recentlyDeletedEntities then
 			global.recentlyDeletedEntities = data.recentlyDeletedEntities
