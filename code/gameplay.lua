@@ -9,7 +9,7 @@ local g_Signals = {} -- {group => {{SignalID},{SignalID}}}
 -- global.wagons - {unit-number => {entity, filter (string)}} -- contains only wagons with filters
 -- global.guiState - {player-index => {entity=entity, blueprint=item_stack, entityWindow={}, signalWindow={}}}
 -- global.openedEntities = {} -- {entity-id => {players={player-index, ...}, active=bool, status=int}}
--- global.recentlyDeletedEntities = {{MapPosition, CircuitMode, filter (string)}, ...}
+-- global.recentlyDeletedEntities = {{MapPosition, surface_index, CircuitMode, filter (string)}, ...}
 
 function GetSignalGroups()
 	if table_size(g_Signals) == 0 then
@@ -219,7 +219,7 @@ function OnEntityBuilt(event)
 	local placedByDying = event.name == defines.events.on_post_entity_died
 	local clickedToBuild = placedByPlayer and g_InputEvents[event.player_index] and (g_InputEvents[event.player_index][BUILD_GHOST_INPUT_EVENT] == event.tick or g_InputEvents[event.player_index][BUILD_INPUT_EVENT] == event.tick)
 	local placedByUndo = placedByPlayer and not clickedToBuild
-	local historyEntry = (placedByUndo or placedByDying) and PopRecentlyDeletedEntry(event.created_entity.position) or nil
+	local historyEntry = (placedByUndo or placedByDying) and PopRecentlyDeletedEntry(event.created_entity.position, event.created_entity.surface_index) or nil
 	local tags = event.created_entity.tags or event.tags or {}
 	if historyEntry then
 		tags['filter'] = historyEntry.filter
@@ -342,7 +342,7 @@ function AddToRecentlyDeleted(entity)
 		table.remove(global.recentlyDeletedEntities, 1)
 	end
 
-	local entry = {pos=entity.position}
+	local entry = {pos=entity.position, surface=entity.surface_index}
 	if IsFilterPump(entity) then
 		entry.circuitMode = global.pumps[entity.unit_number][2]
 		local filter = entity.fluidbox.get_filter(1)
@@ -359,10 +359,10 @@ function AddToRecentlyDeleted(entity)
 	table.insert(global.recentlyDeletedEntities, entry)
 end
 
-function PopRecentlyDeletedEntry(pos)
+function PopRecentlyDeletedEntry(pos, surface)
 	for i = #(global.recentlyDeletedEntities), 1, -1 do
 		local entry = global.recentlyDeletedEntities[i]
-		if math.abs(entry.pos.x - pos.x) < 0.001 and math.abs(entry.pos.y - pos.y) < 0.001 then
+		if entry.surface == surface and math.abs(entry.pos.x - pos.x) < 0.001 and math.abs(entry.pos.y - pos.y) < 0.001 then
 			for j = #(global.recentlyDeletedEntities), i, -1 do
 				table.remove(global.recentlyDeletedEntities, j)
 			end
