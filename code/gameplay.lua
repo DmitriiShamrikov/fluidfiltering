@@ -18,45 +18,34 @@ function GetSignalGroups()
 		for _, group in pairs(game.item_group_prototypes) do
 			local signals = {}
 			for _, subgroup in pairs(group.subgroups) do
+				local subsignals = {}
 				local prototypes = game.get_filtered_item_prototypes({{filter = 'subgroup', subgroup = subgroup.name}})
 				if #(prototypes) > 0 then
-					local subsignals = {}
 					for _, proto in pairs(prototypes) do
 						if not proto.has_flag('hidden') then
 							table.insert(subsignals, {type='item', name=proto.name})
 						end
 					end
-					if #(subsignals) > 0 then
-						table.insert(signals, subsignals)
-					end
-					goto continue
 				end
 	
 				prototypes = game.get_filtered_fluid_prototypes({{filter = 'subgroup', subgroup = subgroup.name}})
 				if #(prototypes) > 0 then
-					local subsignals = {}
 					for _, proto in pairs(prototypes) do
 						if not proto.hidden then
 							table.insert(subsignals, {type='fluid', name=proto.name})
 						end
 					end
-					if #(subsignals) > 0 then
-						table.insert(signals, subsignals)
-					end
-					goto continue
 				end
-	
-				local subsignals = {}
-				for _, vsignal in pairs(game.virtual_signal_prototypes) do
-					if vsignal.name ~= 'signal-each' and vsignal.subgroup.name == subgroup.name then
+
+				prototypes = game.virtual_signal_prototypes
+				for _, vsignal in pairs(prototypes) do
+					if vsignal.subgroup.name == subgroup.name and vsignal.name ~= 'signal-each' then
 						table.insert(subsignals, {type='virtual', name=vsignal.name, special=vsignal.special})
 					end
 				end
 				if #(subsignals) > 0 then
 					table.insert(signals, subsignals)
 				end
-
-				::continue::
 			end
 
 			if #(signals) > 0 then
