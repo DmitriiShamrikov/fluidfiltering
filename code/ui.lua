@@ -3,9 +3,6 @@ require('constants')
 ON_ENTITY_STATE_CHANGED = script.generate_event_name()
 ON_ENTITY_DESTROYED_CUSTOM = script.generate_event_name()
 
-local g_LocalizedSignalNames = {} -- {player-index => {localised-id => localized-name}}
-local g_LocalizationRequests = {}
-
 function SliderValueToConstantValue(svalue)
 	local order = math.floor(svalue / 10)
 	local value = svalue % 10 + order
@@ -770,7 +767,7 @@ function FilterSignals(player, elements, pattern)
 				if pattern == '' then
 					widget.visible = true
 				else
-					local locName = widget.elem_value and g_LocalizedSignalNames[player.index][widget.elem_value.name] or nil
+					local locName = widget.elem_value and global.localizedSignalNames[player.index][widget.elem_value.name] or nil
 					widget.visible = locName and locName:find(pattern, 1, true) ~= nil
 				end
 				if widget.visible then
@@ -923,7 +920,7 @@ function CleanupPlayer(player)
 end
 
 function RequestLocalizedSignalNames(player)
-	if g_LocalizedSignalNames[player.index] ~= nil then
+	if global.localizedSignalNames[player.index] ~= nil then
 		return
 	end
 
@@ -941,7 +938,7 @@ function RequestLocalizedSignalNames(player)
 
 	local ids = player.request_translations(strings)
 	for i, id in pairs(ids) do
-		g_LocalizationRequests[id] = signals[i]
+		global.localizationRequests[id] = signals[i]
 	end
 end
 
@@ -1186,7 +1183,7 @@ script.on_event(defines.events.on_gui_confirmed, IfGuiOpened(function(player, ev
 		SelectConstant(global.guiState[player.index].entity, elements, tonumber(value))
 		CloseWindow(player, event.element)
 	elseif event.element.name == SIGNAL_SEARCH_FIELD_NAME then
-		if g_LocalizedSignalNames[player.index] ~= nil then
+		if global.localizedSignalNames[player.index] ~= nil then
 			local elements = global.guiState[player.index].signalWindow
 			FilterSignals(player, elements, event.element.text:lower())
 		end
@@ -1283,14 +1280,14 @@ script.on_event(defines.events.on_player_removed, function(event)
 end)
 
 script.on_event(defines.events.on_string_translated, function(event)
-	if g_LocalizationRequests[event.id] == nil then
+	if global.localizationRequests[event.id] == nil then
 		return
 	end
 
-	local signal = g_LocalizationRequests[event.id]
-	g_LocalizationRequests[event.id] = nil
+	local signal = global.localizationRequests[event.id]
+	global.localizationRequests[event.id] = nil
 
-	g_LocalizedSignalNames[event.player_index] = g_LocalizedSignalNames[event.player_index] or {}
+	global.localizedSignalNames[event.player_index] = global.localizedSignalNames[event.player_index] or {}
 
 	local result = signal
 	if event.translated then
@@ -1298,5 +1295,5 @@ script.on_event(defines.events.on_string_translated, function(event)
 	else
 		log('Failed to translate ' .. serpent.line(event.localised_string))
 	end
-	g_LocalizedSignalNames[event.player_index][signal] = result
+	global.localizedSignalNames[event.player_index][signal] = result
 end)
