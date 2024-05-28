@@ -1,4 +1,5 @@
 require('constants')
+local dictionary = require("__flib__.dictionary-lite")
 
 ON_ENTITY_STATE_CHANGED = script.generate_event_name()
 ON_ENTITY_DESTROYED_CUSTOM = script.generate_event_name()
@@ -95,6 +96,11 @@ function GetSpritePath(signal)
 	else
 		return nil
 	end
+end
+
+function AreLocalizedNamesReady(playerIndex)
+	local localizedNames = dictionary.get(playerIndex, 'signals')
+	return localizedNames and next(localizedNames)
 end
 
 ----------------------------------------
@@ -305,8 +311,6 @@ function OpenEntityWindow(player, entity)
 	ToggleCircuitLogisiticBlocksVisibility(player, entity, elements)
 
 	player.opened = entityFrame
-	
-	RequestLocalizedSignalNames(player)
 end
 
 function FillEntityStatus(elements, entity)
@@ -619,6 +623,10 @@ function CreateSignalChooseWindow(player, elements, includeSpecialSignals, inclu
 	local searchField = titleFlow.add{type='textfield', name=SIGNAL_SEARCH_FIELD_NAME, style=SIGNAL_SEARCH_FIELD_STYLE}
 	searchField.tags = {dirty=false}
 	searchField.visible = false
+	searchField.enabled = AreLocalizedNamesReady(player.index)
+	if not searchField.enabled then
+		searchField.tooltip = {'gui-browse-games.loading'}
+	end
 
 	local searchButton = titleFlow.add{
 		type='sprite-button',
@@ -754,6 +762,7 @@ function CreateSignalChooseWindow(player, elements, includeSpecialSignals, inclu
 end
 
 function FilterSignals(player, elements, pattern)
+	local signalNames = dictionary.get(player.index, 'signals')
 	local groupsState = {}
 	for _, table in pairs(elements.scrollFrame.children) do
 		local hasSignalsInGroup = false
@@ -767,7 +776,7 @@ function FilterSignals(player, elements, pattern)
 				if pattern == '' then
 					widget.visible = true
 				else
-					local locName = widget.elem_value and global.localizedSignalNames[player.index][widget.elem_value.name] or nil
+					local locName = widget.elem_value and signalNames[widget.elem_value.name] or nil
 					widget.visible = locName and locName:find(pattern, 1, true) ~= nil
 				end
 				if widget.visible then
@@ -919,27 +928,18 @@ function CleanupPlayer(player)
 	CloseFluidFilterPanel(player)
 end
 
-function RequestLocalizedSignalNames(player)
-	if global.localizedSignalNames[player.index] ~= nil then
-		return
-	end
-
+function RequestLocalizedSignalNames()
 	local strings = {}
-	local signals = {}
 	local groups = GetSignalGroups()
 	for _, subgroups in pairs(groups) do
 		for _, subgroup in pairs(subgroups) do
 			for _, signal in pairs(subgroup) do
-				table.insert(strings, GetSignalLocalizedString(signal))
-				table.insert(signals, signal.name)
+				strings[signal.name] = GetSignalLocalizedString(signal)
 			end
 		end
 	end
 
-	local ids = player.request_translations(strings)
-	for i, id in pairs(ids) do
-		global.localizationRequests[id] = signals[i]
-	end
+	dictionary.new('signals', strings)
 end
 
 ---------------------------------------
@@ -1183,7 +1183,8 @@ script.on_event(defines.events.on_gui_confirmed, IfGuiOpened(function(player, ev
 		SelectConstant(global.guiState[player.index].entity, elements, tonumber(value))
 		CloseWindow(player, event.element)
 	elseif event.element.name == SIGNAL_SEARCH_FIELD_NAME then
-		if global.localizedSignalNames[player.index] ~= nil then
+		local signalNames = dictionary.get(player.index, 'signals')
+		if signalNames ~= nil then
 			local elements = global.guiState[player.index].signalWindow
 			FilterSignals(player, elements, event.element.text:lower())
 		end
@@ -1279,21 +1280,15 @@ script.on_event(defines.events.on_player_removed, function(event)
 	global.guiState[event.player_index] = nil
 end)
 
-script.on_event(defines.events.on_string_translated, function(event)
-	if global.localizationRequests[event.id] == nil then
-		return
+script.on_event(dictionary.on_player_dictionaries_ready, IfGuiOpened(function(player, event)
+	local elements = global.guiState[player.index].signalWindow
+	if elements then
+		elements.searchField.enabled = true
+		elements.searchField.tooltip = ''
 	end
+end))
 
-	local signal = global.localizationRequests[event.id]
-	global.localizationRequests[event.id] = nil
-
-	global.localizedSignalNames[event.player_index] = global.localizedSignalNames[event.player_index] or {}
-
-	local result = signal
-	if event.translated then
-		result = event.result:lower()
-	else
-		log('Failed to translate ' .. serpent.line(event.localised_string))
-	end
-	global.localizedSignalNames[event.player_index][signal] = result
-end)
+-- on_tick
+-- on_string_translated
+-- on_player_joined_game
+dictionary.handle_events()

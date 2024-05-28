@@ -1,4 +1,5 @@
 require('constants')
+local dictionary = require("__flib__.dictionary-lite")
 
 local g_PumpConnectionsCache = {}
 local g_FilterPrototypesCache = nil
@@ -10,8 +11,6 @@ local g_Signals = {} -- {group => {{SignalID},{SignalID}}}
 -- global.openedEntities - {entity-id => {players={player-index, ...}, active=bool, status=int}}
 -- global.recentlyDeletedEntities - {{MapPosition, surface_index, CircuitMode, filter (string)}, ...}
 -- global.inputEvents - {player-index => {event-name => last-tick-fired}}
--- global.localizedSignalNames - {player-index => {signal => localized-name}}
--- global.localizationRequests - {id => signal-name}
 
 function GetSignalGroups()
 	if table_size(g_Signals) == 0 then
@@ -163,8 +162,8 @@ function InitGlobal()
 	global.openedEntities = global.openedEntities or {}
 	global.recentlyDeletedEntities = global.recentlyDeletedEntities or {}
 	global.inputEvents = global.inputEvents or {}
-	global.localizedSignalNames = global.localizedSignalNames or {}
-	global.localizationRequests = global.localizationRequests or {}
+
+	RequestLocalizedSignalNames()
 end
 
 function OnConfigChanged()
@@ -590,10 +589,17 @@ function UpdatePumps()
 	end
 end
 
-script.on_init(InitGlobal)
-script.on_configuration_changed(OnConfigChanged)
+script.on_init(function()
+	dictionary.on_init()
+	InitGlobal()
+end)
+script.on_configuration_changed(function()
+	dictionary.on_configuration_changed()
+	OnConfigChanged()
+end)
 
 script.on_event(defines.events.on_tick, function(event)
+	dictionary.on_tick()
 	UpdatePumps()
 end)
 
