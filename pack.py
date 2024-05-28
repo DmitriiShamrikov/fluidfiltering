@@ -6,6 +6,7 @@ files = [
 	'code/debug.lua',
 	'code/gameplay.lua',
 	'code/ui.lua',
+	'locale/en/FluidFiltering.cfg',
 	'prototypes/input.lua',
 	'prototypes/styles.lua',
 	'constants.lua',
