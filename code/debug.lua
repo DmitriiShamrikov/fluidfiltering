@@ -1,3 +1,5 @@
+local dictionary = require("__flib__.dictionary-lite")
+
 function Clear()
 	global.pumps = {}
 	global.wagons = {}
@@ -172,9 +174,15 @@ function ImportSaveData(cmd)
 	end
 end
 
+function RefreshLocale()
+	dictionary.on_init()
+	RequestLocalizedSignalNames()
+end
+
 --commands.add_command('ff.reset', nil, Clear)
 commands.add_command('ff.print_pumps', nil, PrintPumps)
 commands.add_command('ff.print_wagons', nil, PrintWagons)
 commands.add_command('ff.repopulate_pumps', nil, RepopulatePumps)
+commands.add_command('ff.refresh_locale', nil, RefreshLocale)
 --commands.add_command('ff.export', nil, ExportSaveData)
 --commands.add_command('ff.import', nil, ImportSaveData)
